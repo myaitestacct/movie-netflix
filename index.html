@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bhilam's Movie Library</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Background Ambience -->
+    <div class="background-blobs"></div>
+
+    <!-- Navigation -->
+    <nav class="glass-panel navbar">
+        <div class="controls">
+            <input type="text" id="search-input" placeholder="Search title or category..." autocomplete="off">
+            <div class="view-toggles">
+                <button id="btn-grid" class="active" title="Card View">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                </button>
+                <button id="btn-list" title="List View">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div id="search-results-count" class="results-count" style="padding:0.5rem 1rem; color: var(--accent); font-weight:600;"></div>
+
+    <!-- Main Content Area -->
+    <main id="content-area" class="glass-panel container">
+        <!-- Content injected via DOM -->
+    </main>
+    <!-- Details Modal -->
+    <dialog id="movie-modal" class="glass-panel">
+        <div id="poster-lightbox" class="poster-lightbox">
+            <span class="close-lightbox">&times;</span>
+            <img class="lightbox-img" src="" alt="Full Poster">
+        </div>
+        <div class="modal-content">
+            <button class="close-btn" id="close-modal">×</button>
+            <div id="modal-body">
+            </div>
+        </div>
+    </dialog>
+    <script src="app.js"></script>
+</body>
+</html>

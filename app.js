@@ -1,0 +1,613 @@
+// app.js
+
+// --- DOM Elements ---
+const contentArea = document.getElementById('content-area');
+const searchInput = document.getElementById('search-input');
+const btnGrid = document.getElementById('btn-grid');
+const btnList = document.getElementById('btn-list');
+const modal = document.getElementById('movie-modal');
+const closeModal = document.getElementById('close-modal');
+const modalBody = document.getElementById('modal-body');
+
+// for paripakva
+const toggleParipakva = document.getElementById('toggle-paripakva');
+
+// --- State ---
+let currentView = 'grid';
+let debounceTimer;
+let currentQuery = '';
+let currentOffset = 0;
+let hasMoreResults = true;
+let isLoading = false;
+const currentLimit = 50;
+
+// --- Helper: Create DOM Element ---
+function createElement(tag, className = '', textContent = '', attributes = {}) {
+    const el = document.createElement(tag);
+    if (className) className.split(' ').forEach(cls => el.classList.add(cls));
+    if (textContent) el.textContent = textContent;
+    Object.entries(attributes).forEach(([key, value]) => el.setAttribute(key, value));
+    return el;
+}
+
+// --- Helper: Clear container ---
+function clearContainer(container) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+}
+
+// --- Fetch Movies from API ---
+async function fetchMovies(query = '', offset = 0, append = false) {
+    if (isLoading) return;
+    isLoading = true;
+
+    try {
+        if (!append) {
+            clearContainer(contentArea);
+            currentOffset = 0;
+            hasMoreResults = true;
+        }
+
+        //const response = await fetch(
+        //  `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}`);
+        const includeArchive = showParipakva ? 1 : 0;
+
+        const response = await fetch(
+            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}`
+        );
+        
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        const result = await response.json();
+        const movies = result.movies || [];
+        hasMoreResults = result.hasMore === true;
+
+        // Display total results
+        const totalEl = document.getElementById('search-results-count');
+        if (query) {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}"`;
+        } else {
+            totalEl.textContent = '';
+        }
+
+        // Remove loading indicator
+        const loadingEl = contentArea.querySelector('.loading');
+        if (loadingEl) loadingEl.remove();
+
+        if (!append && movies.length === 0) {
+            const msg = createElement('div', 'no-results', query ? 'No matches found in library.' : 'Start typing to search...');
+            Object.assign(msg.style, { gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' });
+            contentArea.appendChild(msg);
+            isLoading = false;
+            return;
+        }
+
+        if (currentView === 'grid') renderGrid(movies, append);
+        else renderTable(movies, append);
+
+        if (hasMoreResults) addLoadMoreButton();
+        else {
+            const btn = contentArea.querySelector('.load-more-btn');
+            if (btn) btn.remove();
+        }
+
+        currentQuery = query;
+        currentOffset = result.nextOffset || offset + movies.length;
+    } catch (err) {
+        console.error('Fetch error:', err);
+        if (!append) {
+            clearContainer(contentArea);
+            const errEl = createElement('div', 'error', 'Error: ' + err.message);
+            Object.assign(errEl.style, { gridColumn: '1 / -1', padding: '2rem', color: 'var(--accent)', textAlign: 'center' });
+            contentArea.appendChild(errEl);
+        }
+    } finally {
+        isLoading = false;
+    }
+}
+
+// --- Load More Button ---
+function addLoadMoreButton() {
+    const existing = contentArea.querySelector('.load-more-btn');
+    if (existing) existing.remove();
+
+    const btn = createElement('button', 'load-more-btn', 'Load More Movies');
+    btn.style.gridColumn = '1 / -1';
+    btn.addEventListener('click', () => {
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+        fetchMovies(currentQuery, currentOffset, true).finally(() => {
+            btn.disabled = false;
+            btn.textContent = 'Load More Movies';
+        });
+    });
+    contentArea.appendChild(btn);
+}
+
+// --- Render Grid ---
+function renderGrid(movies, append = false) {
+
+    let grid = contentArea.querySelector('.movie-grid');
+
+    if (!grid || !append) {
+        grid = createElement('div','movie-grid');
+        if(!append) clearContainer(contentArea);
+        contentArea.appendChild(grid);
+    }
+
+    movies.forEach(movie => {
+
+        const card = createElement('div','movie-card');
+        card.dataset.num = movie.num;
+
+        /* POSTER WRAPPER */
+
+        const posterWrapper = createElement('div','poster-wrapper loading');
+
+        const glow = createElement('div','poster-glow');
+        posterWrapper.appendChild(glow);
+
+        const img = createElement('img');
+
+        img.src = movie.poster || 'placeholder.jpg';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.alt = movie.formattedtitle || movie.title || 'Movie Poster';
+
+        img.onload = () => {
+
+            posterWrapper.classList.remove('loading');
+            posterWrapper.classList.add('loaded');
+
+            try{
+                getPosterGlow(img, glow);
+            }catch(e){
+                console.warn('Glow skipped:',e);
+            }
+        };
+        
+        // Add source badge
+        if (movie.source === 'paripakva') {
+            const sourceBadge = createElement('div','movie-badge badge-source','18+');
+            sourceBadge.style.backgroundColor = 'purple';
+            sourceBadge.style.color = '#fff';
+            posterWrapper.appendChild(sourceBadge);
+        }
+
+        posterWrapper.appendChild(img);
+
+        /* HOVER PREVIEW OVERLAY */
+
+/*        const preview = createElement('div','hover-preview');
+
+        const ratingValPreview = parseFloat(movie.rating) || 0;
+        const ratingText = ratingValPreview > 0 ? `⭐ ${ratingValPreview.toFixed(1)}` : '';
+
+        const yearText = movie.year ? `📅 ${movie.year}` : '';
+
+        const topRow = createElement('div','preview-top');
+        topRow.textContent = [ratingText, yearText].filter(Boolean).join('   ');
+
+        const genreRow = createElement('div','preview-genre', movie.genre || '');
+
+        const descText = (movie.description || '').substring(0,120);
+        const descRow = createElement('div','preview-desc', descText ? descText + '…' : '');
+
+        preview.append(topRow, genreRow, descRow);
+
+        posterWrapper.appendChild(preview);*/
+
+        /* BADGES */
+
+        const createBadge = (text, cls) => {
+            const badge = createElement('div',`movie-badge ${cls}`);
+            badge.innerHTML = text;
+            return badge;
+        };
+
+        /* CERTIFICATION */
+
+        if(movie.certification){
+            posterWrapper.appendChild(
+                createBadge(`🎬 ${movie.certification}`,'badge-cert')
+            );
+        }
+
+        /* LENGTH */
+
+        if(movie.length){
+            posterWrapper.appendChild(
+                createBadge(`⏱ ${movie.length}`,'badge-length')
+            );
+        }
+
+        /* RATING */
+
+        const ratingVal = parseFloat(movie.rating) || 0;
+
+        if(ratingVal > 0){
+
+            const ratingBadge = createBadge(`⭐ ${ratingVal.toFixed(1)}`,'badge-rating');
+
+            if(movie.external_url){
+
+                ratingBadge.style.cursor='pointer';
+                ratingBadge.title='Open external rating';
+
+                ratingBadge.addEventListener('click',e=>{
+                    e.stopPropagation();
+                    window.open(movie.external_url,'_blank');
+                });
+
+            }
+
+            posterWrapper.appendChild(ratingBadge);
+        }
+
+        /* YEAR */
+
+        if(movie.year){
+            posterWrapper.appendChild(
+                createBadge(`📅 ${movie.year}`,'badge-year')
+            );
+        }
+
+        // --- Hover Info (Netflix-style) ---
+        const hoverInfo = createElement('div', 'hover-info');
+        const descSize = 180;
+        hoverInfo.textContent = movie.description 
+            ? (movie.description.length > descSize ? movie.description.slice(0, descSize) + '…' : movie.description)
+            : 'No description available.';
+        posterWrapper.appendChild(hoverInfo);
+        
+        /* INFO SECTION */
+
+        const info = createElement('div','card-info');
+
+        const titleText = `${movie.num} - ${movie.title}`;
+
+        const title = createElement('div','card-title',titleText);
+        title.setAttribute('title',titleText);
+
+        title.style.whiteSpace='normal';
+        title.style.wordBreak='break-word';
+
+        const meta = createElement('div','card-meta');
+
+        if(movie.genre){
+            meta.appendChild(createElement('span','',movie.genre));
+        }
+
+        info.append(title,meta);
+
+        card.append(posterWrapper,info);
+
+        card.addEventListener('click',()=>openModal(movie));
+
+        grid.appendChild(card);
+
+    });
+
+}
+
+// --- Poster Glow ---
+function getPosterGlow(img, glowEl){
+
+    if(!img.complete || img.naturalWidth === 0) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d',{willReadFrequently:true});
+
+    canvas.width = 20;
+    canvas.height = 20;
+
+    ctx.drawImage(img,0,0,20,20);
+
+    const pixels = ctx.getImageData(0,0,20,20).data;
+
+    let r=0,g=0,b=0,count=0;
+
+    for(let i=0;i<pixels.length;i+=4){
+
+        r+=pixels[i];
+        g+=pixels[i+1];
+        b+=pixels[i+2];
+        count++;
+
+    }
+
+    r=Math.floor(r/count);
+    g=Math.floor(g/count);
+    b=Math.floor(b/count);
+
+    glowEl.style.background =
+        `radial-gradient(circle, rgba(${r},${g},${b},0.65) 0%, transparent 70%)`;
+}
+
+// --- Render Table ---
+function renderTable(movies, append = false) {
+    let table = contentArea.querySelector('.movie-table');
+    let tbody = table ? table.querySelector('tbody') : null;
+    const posterWrapper = createElement('div','poster-wrapper loading');
+
+    if (!table || !append) {
+        table = createElement('table', 'movie-table');
+        const thead = createElement('thead');
+        tbody = createElement('tbody');
+
+        const headerRow = createElement('tr');
+        ['#', 'Cover', 'Title', 'Certification', 'Year', 'Category', 'Rating'].forEach(h => {
+            headerRow.appendChild(createElement('th', '', h));
+        });
+        thead.appendChild(headerRow);
+        table.append(thead, tbody);
+        if (!append) clearContainer(contentArea);
+        contentArea.appendChild(table);
+    }
+
+    movies.forEach(movie => {
+        const row = createElement('tr');
+        row.dataset.num = movie.num;
+
+        const tdNum = createElement('td', 'num-cell', `#${movie.num}`);
+        Object.assign(tdNum.style, { fontWeight: '600', color: 'var(--accent)', minWidth: '50px' });
+
+        const tdImg = createElement('td');
+        const img = createElement('img', 'table-poster', '', { src: movie.poster, loading: 'lazy' });
+        tdImg.appendChild(img);
+
+        const tdTitle = createElement('td', '', movie.title);
+        const tdCert = createElement('td', '', movie.certification);
+        const tdYear = createElement('td', '', movie.year);
+        const tdGenre = createElement('td', '', movie.genre);
+
+        const tdRating = createElement('td');
+        const ratingVal = parseFloat(movie.rating) || 0;
+        const ratingText = ratingVal > 0 ? `★ ${ratingVal}` : '-';
+
+        if (movie.external_url && ratingVal > 0) {
+            const link = createElement('a', '', ratingText, {
+                href: movie.external_url,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+                title: 'Open external link'
+            });
+            Object.assign(link.style, { color: 'var(--accent)', textDecoration: 'none' });
+            link.addEventListener('click', e => e.stopPropagation());
+            tdRating.appendChild(link);
+        } else {
+            tdRating.textContent = ratingText;
+            if (ratingVal === 0) tdRating.style.opacity = '0.5';
+        }
+        
+        // Add source badge
+        if (movie.source === 'paripakva') {
+            const sourceBadge = createElement('div','movie-badge badge-source','Paripakva');
+            sourceBadge.style.backgroundColor = 'purple';
+            sourceBadge.style.color = '#fff';
+            posterWrapper.appendChild(sourceBadge);
+        }
+
+        row.append(tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
+        row.addEventListener('click', () => openModal(movie));
+        tbody.appendChild(row);
+    });
+}
+
+// --- Modal ---
+function openModal(movie) {
+    clearContainer(modalBody);
+
+    // Modal header (background poster)
+    const header = createElement('div', 'modal-header');
+    header.style.backgroundImage = `url(${movie.poster})`;
+
+    // Header top row (ID + title)
+    const headerTop = createElement('div', 'modal-header-top');
+    const title = createElement('h2');
+    title.append(createElement('span', 'modal-num', `#${movie.num}`), document.createTextNode(movie.title));
+    headerTop.appendChild(title);
+
+    // Modal content row: flex container
+    const contentRow = createElement('div', 'modal-content-row');
+
+    // Poster (sticky on left)
+const posterWrapper = createElement('div', 'modal-poster-wrapper');
+
+// Make poster clickable to open lightbox
+const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
+posterImg.style.cursor = 'pointer';
+
+posterImg.addEventListener('click', () => {
+    const lightbox = document.getElementById('poster-lightbox');
+    const lightboxImg = lightbox.querySelector('.lightbox-img');
+    lightboxImg.src = movie.poster;
+
+    // Show with animation
+    lightbox.classList.add('show');
+});
+
+posterWrapper.appendChild(posterImg);
+
+if (movie.certification) {
+    const badge = createCertificationBadge(movie.certification);
+    posterWrapper.appendChild(badge);
+}
+
+    contentRow.appendChild(posterWrapper);
+
+    // Details column (scrollable)
+    const details = createElement('div', 'modal-details');
+
+    // Meta info
+    const meta = createElement('div', 'modal-meta');
+    if (movie.year) meta.appendChild(createElement('span', '', movie.year));
+    if (movie.genre) meta.appendChild(createElement('span', '', movie.genre));
+    if (movie.length) {
+        const lengthSpan = createElement('span');
+        lengthSpan.innerHTML = `
+            <svg class="tech-icon" width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="vertical-align:middle;margin-right:4px;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            ${movie.length}
+        `;
+        meta.appendChild(lengthSpan);
+    }
+
+    const ratingVal = parseFloat(movie.rating) || 0;
+    const ratingText = ratingVal > 0 ? `★ ${ratingVal}` : '-';
+    const rating = movie.external_url && ratingVal > 0
+        ? createElement('a', 'rating-badge', ratingText, { href: movie.external_url, target: '_blank', rel: 'noopener noreferrer', title: 'Open external link' })
+        : createElement('span', 'rating-badge', ratingText);
+    if (!rating.href && ratingVal === 0) rating.style.opacity = '0.5';
+    if (rating.href) rating.style.cursor = 'pointer';
+    meta.appendChild(rating);
+
+    // Synopsis / director / cast
+    details.append(
+        meta,
+        createElement('span', 'modal-label', 'SYNOPSIS'),
+        createElement('p', 'modal-desc', movie.description || 'No description available.'),
+        createElement('span', 'modal-label', 'DIRECTOR'),
+        createElement('p', 'modal-director', movie.director || 'Unknown'),
+        createElement('span', 'modal-label', 'CAST'),
+        createElement('p', 'modal-cast', movie.actors || 'Unknown')
+    );
+
+    // Tech details
+    const techSection = createElement('div', 'tech-details');
+    const inlineRow = createElement('div', 'tech-row-inline');
+
+    const resolutionItem = createElement('div', 'tech-item');
+    resolutionItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="20" x2="16" y2="20"></line></svg><span class="tech-value">${movie.resolution || 'N/A'}</span>`;
+    const audioItem = createElement('div', 'tech-item');
+    audioItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a4 4 0 010 6"></path></svg><span class="tech-value">${movie.audio || 'N/A'}</span>`;
+    const sizeItem = createElement('div', 'tech-item');
+    sizeItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 12h8"></path></svg><span class="tech-value">${movie.size || 'N/A'}</span>`;
+
+    inlineRow.append(sizeItem, resolutionItem, audioItem);
+    techSection.appendChild(inlineRow);
+
+    // File row
+    if (movie.filepath) {
+        const fullPath = movie.filepath.replace(/\\/g, '/');
+        const lastSlash = fullPath.lastIndexOf('/');
+        const fileName = lastSlash >= 0 ? fullPath.slice(lastSlash + 1) : fullPath;
+
+        const fileWrapper = createElement('div', 'tech-file-wrapper');
+        fileWrapper.style.marginTop = '0';
+
+        const fileRow = createElement('div', 'tech-item tech-file-row');
+        fileRow.innerHTML = `
+            <svg class="tech-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <span class="tech-file-name">${fileName || 'N/A'}</span>
+            <button class="copy-file-btn" title="Copy file name">Copy</button>
+        `;
+        const copyBtn = fileRow.querySelector('.copy-file-btn');
+        copyBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(fileName).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy', 1200);
+            });
+        });
+
+        fileWrapper.appendChild(fileRow);
+        techSection.appendChild(fileWrapper);
+    }
+
+    details.appendChild(techSection);
+    contentRow.appendChild(details);
+    header.append(headerTop, contentRow);
+    modalBody.appendChild(header);
+
+    modal.showModal();
+}
+
+const lightbox = document.getElementById('poster-lightbox');
+const closeBtn = lightbox.querySelector('.close-lightbox');
+
+function closeLightbox() {
+    lightbox.classList.remove('show');
+}
+
+closeBtn.addEventListener('click', closeLightbox);
+lightbox.addEventListener('click', e => {
+    if (e.target === lightbox) closeLightbox();
+});
+
+// --- Event Listeners ---
+searchInput.addEventListener('input', e => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => fetchMovies(e.target.value, 0, false), 400);
+});
+
+btnGrid.addEventListener('click', () => {
+    if (currentView !== 'grid') {
+        currentView = 'grid';
+        btnGrid.classList.add('active');
+        btnList.classList.remove('active');
+        fetchMovies(searchInput.value, 0, false);
+    }
+});
+
+btnList.addEventListener('click', () => {
+    if (currentView !== 'list') {
+        currentView = 'list';
+        btnList.classList.add('active');
+        btnGrid.classList.remove('active');
+        fetchMovies(searchInput.value, 0, false);
+    }
+});
+
+function smoothClose() {
+    modal.classList.add('closing');
+    setTimeout(() => {
+        modal.classList.remove('closing');
+        modal.close();
+    }, 260);
+}
+
+closeModal.addEventListener('click', smoothClose);
+modal.addEventListener('click', e => { if (e.target === modal) smoothClose(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open) smoothClose(); });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const posterLightbox = document.querySelector('.poster-lightbox');
+    const lightboxImg = posterLightbox.querySelector('.lightbox-img');
+
+    document.querySelectorAll('.modal-img').forEach(img => {
+        img.addEventListener('click', () => {
+            lightboxImg.src = img.src; 
+            posterLightbox.classList.add('show');
+        });
+    });
+
+    posterLightbox.querySelector('.close-lightbox').addEventListener('click', () => {
+        posterLightbox.classList.remove('show');
+    });
+});
+
+// --- Certification Badge ---
+function createCertificationBadge(certText) {
+    if (!certText) return null;
+    const badge = createElement('div', 'cert-badge', 'Rated: ' + certText);
+    return badge;
+}
+
+let showParipakva = false; // default off
+
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
+        showParipakva = !showParipakva;
+        fetchMovies(searchInput.value, 0, false);
+        console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
+    }
+});
+
+
+// --- Initial Load ---
+fetchMovies('', 0, false);
