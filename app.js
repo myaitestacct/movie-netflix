@@ -65,6 +65,40 @@ function hideLoadingSpinner() {
     if (spinner) spinner.remove();
 }
 
+// --- URL State: Save current state to URL hash ---
+function updateURL() {
+    const params = new URLSearchParams();
+    if (searchInput.value) params.set('q', searchInput.value);
+    if (currentSort !== 'num_asc') params.set('sort', currentSort);
+    if (currentCategory) params.set('genre', currentCategory);
+    if (showParipakva) params.set('archive', '1');
+
+    const hash = params.toString();
+    const newURL = hash ? `${window.location.pathname}#${hash}` : window.location.pathname;
+    history.replaceState(null, '', newURL);
+}
+
+// --- URL State: Restore state from URL hash ---
+function loadFromURL() {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return false;
+
+    const params = new URLSearchParams(hash);
+    const q = params.get('q') || '';
+    const sort = params.get('sort') || 'num_asc';
+    const genre = params.get('genre') || '';
+    const archive = params.get('archive') || '0';
+
+    searchInput.value = q;
+    currentSort = sort;
+    currentCategory = genre;
+    showParipakva = archive === '1';
+
+    sortSelect.value = currentSort;
+
+    return true;
+}
+
 // --- Fetch and render genre filter chips ---
 async function fetchCategories() {
     try {
@@ -177,6 +211,7 @@ async function fetchMovies(query = '', offset = 0, append = false) {
 
         currentQuery = query;
         currentOffset = result.nextOffset || offset + movies.length;
+        updateURL();
     } catch (err) {
         console.error('Fetch error:', err);
         hideLoadingSpinner();
@@ -704,5 +739,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- Initial Load ---
+loadFromURL();
 fetchCategories();
-fetchMovies('', 0, false);
+fetchMovies(searchInput.value, 0, false);
+
+// Handle browser back/forward buttons
+window.addEventListener('hashchange', () => {
+    loadFromURL();
+    fetchMovies(searchInput.value, 0, false);
+});
