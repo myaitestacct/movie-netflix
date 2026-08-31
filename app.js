@@ -8,6 +8,7 @@ const btnList = document.getElementById('btn-list');
 const modal = document.getElementById('movie-modal');
 const closeModal = document.getElementById('close-modal');
 const modalBody = document.getElementById('modal-body');
+const sortSelect = document.getElementById('sort-select');
 
 // Paripakva archive mode is toggled via Ctrl+Shift+K keyboard shortcut
 
@@ -20,6 +21,7 @@ let hasMoreResults = true;
 let isLoading = false;
 const currentLimit = 50;
 let showParipakva = false; // archive/18+ content toggle (Ctrl+Shift+K)
+let currentSort = 'num_asc'; // current sort order
 
 // --- Helper: Create DOM Element ---
 function createElement(tag, className = '', textContent = '', attributes = {}) {
@@ -80,7 +82,7 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         const includeArchive = showParipakva ? 1 : 0;
 
         const response = await fetch(
-            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}`
+            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}&sort=${encodeURIComponent(currentSort)}`
         );
         
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
@@ -562,6 +564,11 @@ lightbox.addEventListener('click', e => {
 searchInput.addEventListener('input', e => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => fetchMovies(e.target.value, 0, false), 400);
+});
+
+sortSelect.addEventListener('change', () => {
+    currentSort = sortSelect.value;
+    fetchMovies(searchInput.value, 0, false);
 });
 
 btnGrid.addEventListener('click', () => {
