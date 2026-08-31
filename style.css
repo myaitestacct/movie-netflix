@@ -1242,7 +1242,12 @@ font-size:.75rem;
 ========================= */
 #search-results-count {
     margin-top: 30px;
+    padding: 0.5rem 1rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
 }
+
 .genre-filters {
     display: flex;
     gap: 8px;
