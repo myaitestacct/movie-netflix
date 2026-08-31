@@ -1,20 +1,23 @@
 <?php
 // api.php - NO whitespace before this line!
 
-error_reporting(0);
+error_reporting(E_ALL);
 ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 
-// ===== DATABASE CONFIGURATION =====
-$host = 'localhost';
-$db   = 'movies';
-$user = 'root';
-$pass = '';
-$table = 'movies';
-$charset = 'utf8mb4';
+// ===== LOAD DATABASE CONFIGURATION =====
+$config = require __DIR__ . '/config.php';
+
+$host = $config['host'];
+$db   = $config['db'];
+$user = $config['user'];
+$pass = $config['pass'];
+$charset = $config['charset'];
+$table = $config['table'];
 
 // ===== POSTER PATH CONFIGURATION =====
 $posterBasePath = '../movies/antexport/';
@@ -45,14 +48,26 @@ $query = isset($_GET['q']) ? trim($_GET['q']) : '';
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
 $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
 
-// Determine source table
+// Determine source table (whitelist allowed table names)
 $useParipakva = isset($_GET['archive']) && $_GET['archive'] == 1;
+$allowedTables = [$table, 'paripakva'];
 $tableToQuery = $useParipakva ? 'paripakva' : $table;
+
+// Validate table name is in whitelist
+if (!in_array($tableToQuery, $allowedTables, true)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid table']);
+    exit;
+}
 
 // Cap limit to prevent abuse
 $limit = min($limit, 100);
 if ($limit < 1) $limit = 50;
 if ($offset < 0) $offset = 0;
+
+// Sanitize search query (strip null bytes, limit length)
+$query = str_replace("\0", '', $query);
+$query = mb_substr($query, 0, 200);
 
 // Build query with pagination
 $sql = "SELECT 
@@ -106,7 +121,7 @@ try {
 
 // ===== GET TOTAL MATCHING RESULTS =====
 try {
-    $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $table WHERE FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $tableToQuery WHERE FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2");
     $countStmt->bindValue(':search1', $searchTerm, PDO::PARAM_STR);
     $countStmt->bindValue(':search2', $searchTerm, PDO::PARAM_STR);
     $countStmt->execute();
