@@ -199,11 +199,17 @@ function addLoadMoreButton() {
     const btn = createElement('button', 'load-more-btn', 'Load More Movies');
     btn.style.gridColumn = '1 / -1';
     btn.addEventListener('click', () => {
+        // Remember where the button is so we can scroll to new content
+        const scrollTarget = btn.offsetTop - 20;
+
         btn.disabled = true;
         btn.textContent = 'Loading...';
         fetchMovies(currentQuery, currentOffset, true).finally(() => {
-            btn.disabled = false;
-            btn.textContent = 'Load More Movies';
+            // Remove the old button (a new one will be added by fetchMovies)
+            if (btn.parentNode) btn.remove();
+
+            // Smooth scroll to where new content starts
+            contentArea.scrollTo({ top: scrollTarget, behavior: 'smooth' });
         });
     });
     contentArea.appendChild(btn);
