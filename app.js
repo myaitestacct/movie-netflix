@@ -237,6 +237,23 @@ function renderGrid(movies, append = false) {
         img.decoding = 'async';
         img.alt = movie.formattedtitle || movie.title || 'Movie Poster';
 
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = 'data:image/svg+xml,' + encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300">
+                    <rect width="200" height="300" fill="#1a1a1a"/>
+                    <g transform="translate(100,130)" fill="none" stroke="#444" stroke-width="2">
+                        <rect x="-25" y="-35" width="50" height="70" rx="4"/>
+                        <circle cx="0" cy="-10" r="12"/>
+                        <path d="M-18 25 L-8 10 L0 18 L8 5 L18 25"/>
+                    </g>
+                    <text x="100" y="200" text-anchor="middle" fill="#555" font-family="sans-serif" font-size="12">No Poster</text>
+                </svg>
+            `);
+            posterWrapper.classList.remove('loading');
+            posterWrapper.classList.add('loaded');
+        };
+        
         img.onload = () => {
             posterWrapper.classList.remove('loading');
             posterWrapper.classList.add('loaded');
@@ -395,6 +412,15 @@ function renderTable(movies, append = false) {
 
         const tdImg = createElement('td');
         const img = createElement('img', 'table-poster', '', { src: movie.poster, loading: 'lazy' });
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = 'data:image/svg+xml,' + encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="60" viewBox="0 0 40 60">
+                    <rect width="40" height="60" fill="#1a1a1a"/>
+                    <text x="20" y="35" text-anchor="middle" fill="#555" font-family="sans-serif" font-size="8">N/A</text>
+                </svg>
+            `);
+        };
         tdImg.appendChild(img);
 
         const tdTitle = createElement('td', '', movie.title);
@@ -459,6 +485,21 @@ function openModal(movie) {
 
     const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
     posterImg.style.cursor = 'pointer';
+
+    posterImg.onerror = () => {
+        posterImg.onerror = null;
+        posterImg.src = 'data:image/svg+xml,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="350" height="500" viewBox="0 0 350 500">
+                <rect width="350" height="500" fill="#1a1a1a"/>
+                <g transform="translate(175,220)" fill="none" stroke="#444" stroke-width="2">
+                    <rect x="-35" y="-50" width="70" height="100" rx="6"/>
+                    <circle cx="0" cy="-18" r="18"/>
+                    <path d="M-28 38 L-14 15 L0 28 L14 8 L28 38"/>
+                </g>
+                <text x="175" y="340" text-anchor="middle" fill="#555" font-family="sans-serif" font-size="16">No Poster Available</text>
+            </svg>
+        `);
+    };
 
     posterImg.addEventListener('click', () => {
         const lightbox = document.getElementById('poster-lightbox');
@@ -655,7 +696,6 @@ document.addEventListener('keydown', (e) => {
         console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
     }
 });
-
 
 // --- Initial Load ---
 fetchCategories();
