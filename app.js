@@ -142,12 +142,14 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         hideLoadingSpinner();
 
         // Display total results
-        const totalEl = document.getElementById('search-results-count');
-        if (query) {
-            const shownCount = append ? currentOffset + movies.length : movies.length;
+        if (query && currentCategory) {
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}" in ${currentCategory}`;
+        } else if (query) {
             totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}"`;
+        } else if (currentCategory) {
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} in ${currentCategory}`;
         } else {
-            totalEl.textContent = '';
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} movies`;
         }
 
         const loadingEl = contentArea.querySelector('.loading');
