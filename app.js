@@ -9,8 +9,7 @@ const modal = document.getElementById('movie-modal');
 const closeModal = document.getElementById('close-modal');
 const modalBody = document.getElementById('modal-body');
 
-// for paripakva
-const toggleParipakva = document.getElementById('toggle-paripakva');
+// Paripakva archive mode is toggled via Ctrl+Shift+K keyboard shortcut
 
 // --- State ---
 let currentView = 'grid';
@@ -20,6 +19,7 @@ let currentOffset = 0;
 let hasMoreResults = true;
 let isLoading = false;
 const currentLimit = 50;
+let showParipakva = false; // archive/18+ content toggle (Ctrl+Shift+K)
 
 // --- Helper: Create DOM Element ---
 function createElement(tag, className = '', textContent = '', attributes = {}) {
@@ -35,6 +35,14 @@ function clearContainer(container) {
     while (container.firstChild) container.removeChild(container.firstChild);
 }
 
+// --- Helper: Escape HTML to prevent XSS ---
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 // --- Fetch Movies from API ---
 async function fetchMovies(query = '', offset = 0, append = false) {
     if (isLoading) return;
@@ -47,8 +55,6 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             hasMoreResults = true;
         }
 
-        //const response = await fetch(
-        //  `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}`);
         const includeArchive = showParipakva ? 1 : 0;
 
         const response = await fetch(
@@ -175,32 +181,13 @@ function renderGrid(movies, append = false) {
 
         posterWrapper.appendChild(img);
 
-        /* HOVER PREVIEW OVERLAY */
-
-/*        const preview = createElement('div','hover-preview');
-
-        const ratingValPreview = parseFloat(movie.rating) || 0;
-        const ratingText = ratingValPreview > 0 ? `⭐ ${ratingValPreview.toFixed(1)}` : '';
-
-        const yearText = movie.year ? `📅 ${movie.year}` : '';
-
-        const topRow = createElement('div','preview-top');
-        topRow.textContent = [ratingText, yearText].filter(Boolean).join('   ');
-
-        const genreRow = createElement('div','preview-genre', movie.genre || '');
-
-        const descText = (movie.description || '').substring(0,120);
-        const descRow = createElement('div','preview-desc', descText ? descText + '…' : '');
-
-        preview.append(topRow, genreRow, descRow);
-
-        posterWrapper.appendChild(preview);*/
+        /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
 
         /* BADGES */
 
         const createBadge = (text, cls) => {
             const badge = createElement('div',`movie-badge ${cls}`);
-            badge.innerHTML = text;
+            badge.textContent = text;
             return badge;
         };
 
@@ -327,7 +314,6 @@ function getPosterGlow(img, glowEl){
 function renderTable(movies, append = false) {
     let table = contentArea.querySelector('.movie-table');
     let tbody = table ? table.querySelector('tbody') : null;
-    const posterWrapper = createElement('div','poster-wrapper loading');
 
     if (!table || !append) {
         table = createElement('table', 'movie-table');
@@ -379,12 +365,19 @@ function renderTable(movies, append = false) {
             if (ratingVal === 0) tdRating.style.opacity = '0.5';
         }
         
-        // Add source badge
+        // Add source badge for paripakva in table view
         if (movie.source === 'paripakva') {
-            const sourceBadge = createElement('div','movie-badge badge-source','Paripakva');
-            sourceBadge.style.backgroundColor = 'purple';
-            sourceBadge.style.color = '#fff';
-            posterWrapper.appendChild(sourceBadge);
+            const sourceBadge = createElement('span', '', '18+');
+            Object.assign(sourceBadge.style, {
+                backgroundColor: 'purple',
+                color: '#fff',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '0.7rem',
+                fontWeight: '600',
+                marginLeft: '6px'
+            });
+            tdTitle.appendChild(sourceBadge);
         }
 
         row.append(tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
@@ -411,27 +404,27 @@ function openModal(movie) {
     const contentRow = createElement('div', 'modal-content-row');
 
     // Poster (sticky on left)
-const posterWrapper = createElement('div', 'modal-poster-wrapper');
+    const posterWrapper = createElement('div', 'modal-poster-wrapper');
 
-// Make poster clickable to open lightbox
-const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
-posterImg.style.cursor = 'pointer';
+    // Make poster clickable to open lightbox
+    const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
+    posterImg.style.cursor = 'pointer';
 
-posterImg.addEventListener('click', () => {
-    const lightbox = document.getElementById('poster-lightbox');
-    const lightboxImg = lightbox.querySelector('.lightbox-img');
-    lightboxImg.src = movie.poster;
+    posterImg.addEventListener('click', () => {
+        const lightbox = document.getElementById('poster-lightbox');
+        const lightboxImg = lightbox.querySelector('.lightbox-img');
+        lightboxImg.src = movie.poster;
 
-    // Show with animation
-    lightbox.classList.add('show');
-});
+        // Show with animation
+        lightbox.classList.add('show');
+    });
 
-posterWrapper.appendChild(posterImg);
+    posterWrapper.appendChild(posterImg);
 
-if (movie.certification) {
-    const badge = createCertificationBadge(movie.certification);
-    posterWrapper.appendChild(badge);
-}
+    if (movie.certification) {
+        const badge = createCertificationBadge(movie.certification);
+        posterWrapper.appendChild(badge);
+    }
 
     contentRow.appendChild(posterWrapper);
 
@@ -449,7 +442,7 @@ if (movie.certification) {
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
-            ${movie.length}
+            ${escapeHtml(movie.length)}
         `;
         meta.appendChild(lengthSpan);
     }
@@ -479,11 +472,11 @@ if (movie.certification) {
     const inlineRow = createElement('div', 'tech-row-inline');
 
     const resolutionItem = createElement('div', 'tech-item');
-    resolutionItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="20" x2="16" y2="20"></line></svg><span class="tech-value">${movie.resolution || 'N/A'}</span>`;
+    resolutionItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="20" x2="16" y2="20"></line></svg><span class="tech-value">${escapeHtml(movie.resolution) || 'N/A'}</span>`;
     const audioItem = createElement('div', 'tech-item');
-    audioItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a4 4 0 010 6"></path></svg><span class="tech-value">${movie.audio || 'N/A'}</span>`;
+    audioItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a4 4 0 010 6"></path></svg><span class="tech-value">${escapeHtml(movie.audio) || 'N/A'}</span>`;
     const sizeItem = createElement('div', 'tech-item');
-    sizeItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 12h8"></path></svg><span class="tech-value">${movie.size || 'N/A'}</span>`;
+    sizeItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 12h8"></path></svg><span class="tech-value">${escapeHtml(movie.size) || 'N/A'}</span>`;
 
     inlineRow.append(sizeItem, resolutionItem, audioItem);
     techSection.appendChild(inlineRow);
@@ -503,7 +496,7 @@ if (movie.certification) {
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
             </svg>
-            <span class="tech-file-name">${fileName || 'N/A'}</span>
+            <span class="tech-file-name">${escapeHtml(fileName) || 'N/A'}</span>
             <button class="copy-file-btn" title="Copy file name">Copy</button>
         `;
         const copyBtn = fileRow.querySelector('.copy-file-btn');
@@ -575,21 +568,7 @@ closeModal.addEventListener('click', smoothClose);
 modal.addEventListener('click', e => { if (e.target === modal) smoothClose(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open) smoothClose(); });
 
-document.addEventListener('DOMContentLoaded', () => {
-    const posterLightbox = document.querySelector('.poster-lightbox');
-    const lightboxImg = posterLightbox.querySelector('.lightbox-img');
-
-    document.querySelectorAll('.modal-img').forEach(img => {
-        img.addEventListener('click', () => {
-            lightboxImg.src = img.src; 
-            posterLightbox.classList.add('show');
-        });
-    });
-
-    posterLightbox.querySelector('.close-lightbox').addEventListener('click', () => {
-        posterLightbox.classList.remove('show');
-    });
-});
+// Lightbox functionality is handled inline in openModal()
 
 // --- Certification Badge ---
 function createCertificationBadge(certText) {
@@ -597,8 +576,6 @@ function createCertificationBadge(certText) {
     const badge = createElement('div', 'cert-badge', 'Rated: ' + certText);
     return badge;
 }
-
-let showParipakva = false; // default off
 
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
