@@ -596,6 +596,28 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open
 
 // Lightbox functionality is handled inline in openModal()
 
+// --- Back to Top Button ---
+const backToTopBtn = createElement('button', 'back-to-top-btn');
+backToTopBtn.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+`;
+backToTopBtn.title = 'Back to top';
+backToTopBtn.addEventListener('click', () => {
+    contentArea.scrollTo({ top: 0, behavior: 'smooth' });
+});
+document.body.appendChild(backToTopBtn);
+
+// Show/hide based on scroll position
+contentArea.addEventListener('scroll', () => {
+    if (contentArea.scrollTop > 400) {
+        backToTopBtn.classList.add('visible');
+    } else {
+        backToTopBtn.classList.remove('visible');
+    }
+});
+
 // --- Certification Badge ---
 function createCertificationBadge(certText) {
     if (!certText) return null;
