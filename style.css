@@ -1241,7 +1241,7 @@ font-size:.75rem;
    GENRE FILTER CHIPS
 ========================= */
 #search-results-count {
-    margin-top: 50px;
+    margin-top: 30px;
 }
 .genre-filters {
     display: flex;
