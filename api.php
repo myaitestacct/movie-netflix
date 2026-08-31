@@ -43,10 +43,34 @@ try {
     exit;
 }
 
+// ===== HANDLE SPECIAL ACTIONS =====
+$action = isset($_GET['action']) ? trim($_GET['action']) : '';
+
+if ($action === 'categories') {
+    $catTable = (isset($_GET['archive']) && $_GET['archive'] == 1) ? 'paripakva' : $table;
+    $allowedCatTables = [$table, 'paripakva'];
+    if (!in_array($catTable, $allowedCatTables, true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid table']);
+        exit;
+    }
+    try {
+        $catStmt = $pdo->prepare("SELECT DISTINCT CATEGORY FROM $catTable WHERE CATEGORY IS NOT NULL AND CATEGORY != '' ORDER BY CATEGORY ASC");
+        $catStmt->execute();
+        $categories = array_column($catStmt->fetchAll(), 'CATEGORY');
+        echo json_encode(['categories' => $categories]);
+    } catch (\PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to fetch categories']);
+    }
+    exit;
+}
+
 // ===== PAGINATION PARAMETERS =====
 $query = isset($_GET['q']) ? trim($_GET['q']) : '';
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
 $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+$category = isset($_GET['category']) ? trim($_GET['category']) : '';
 
 // Determine source table (whitelist allowed table names)
 $useParipakva = isset($_GET['archive']) && $_GET['archive'] == 1;
@@ -90,6 +114,12 @@ if (!array_key_exists($sort, $allowedSorts)) {
 $orderBy = $allowedSorts[$sort];
 
 // Build query with pagination
+$conditions = ["(FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2)"];
+if ($category !== '') {
+    $conditions[] = "CATEGORY = :category";
+}
+$whereClause = implode(' AND ', $conditions);
+
 $sql = "SELECT 
             NUM, 
             FORMATTEDTITLE, 
@@ -110,8 +140,7 @@ $sql = "SELECT
             FILESIZE,
             FILEPATH
         FROM $tableToQuery
-        WHERE FORMATTEDTITLE LIKE :search1 
-        OR CATEGORY LIKE :search2 
+        WHERE $whereClause
         ORDER BY $orderBy 
         LIMIT :limit OFFSET :offset";
 
@@ -121,15 +150,15 @@ try {
     
     $stmt->bindValue(':search1', $searchTerm, PDO::PARAM_STR);
     $stmt->bindValue(':search2', $searchTerm, PDO::PARAM_STR);
+    if ($category !== '') {
+        $stmt->bindValue(':category', $category, PDO::PARAM_STR);
+    }
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     
     $stmt->execute();
     $rows = $stmt->fetchAll();
     
-    // ===== FIXED PAGINATION LOGIC =====
-    // If we got fewer results than requested, we've reached the end
-    // If we got exactly the limit, there MIGHT be more (check next batch)
     $returnedCount = count($rows);
     $hasMore = ($returnedCount === $limit);
     
@@ -141,25 +170,26 @@ try {
 
 // ===== GET TOTAL MATCHING RESULTS =====
 try {
-    $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $tableToQuery WHERE FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $tableToQuery WHERE $whereClause");
     $countStmt->bindValue(':search1', $searchTerm, PDO::PARAM_STR);
     $countStmt->bindValue(':search2', $searchTerm, PDO::PARAM_STR);
+    if ($category !== '') {
+        $countStmt->bindValue(':category', $category, PDO::PARAM_STR);
+    }
     $countStmt->execute();
     $totalResult = $countStmt->fetch();
     $totalMatches = $totalResult['total'] ?? 0;
 } catch (\PDOException $e) {
-    $totalMatches = 0; // fallback
+    $totalMatches = 0;
 }
 
 // Map DB Columns to Frontend Model
 $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPosterFileName, $useParipakva, $paripakvaPosterBasePath, $paripakvaPosterBaseUrl) {
     
-    // ===== POSTER PATH LOGIC =====
     $posterValue = (!empty($row['PICTURENAME']) && trim($row['PICTURENAME']) !== '') 
         ? $row['PICTURENAME'] 
         : $noPosterFileName;
     
-    // Choose paths based on source
     if ($useParipakva) {
         $posterPath = $paripakvaPosterBasePath;
         $posterUrl  = $paripakvaPosterBaseUrl;
@@ -180,16 +210,13 @@ $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPost
     } else {
         $imageSrc = $posterUrl . $noPosterFileName;
     }
-    // =============================
 
     $rating = !empty($row['USERRATING']) ? $row['USERRATING'] : $row['RATING'];
     
-    // ===== EXTERNAL URL LOGIC =====
     $externalUrl = null;
     if (!empty($row['URL']) && filter_var(trim($row['URL']), FILTER_VALIDATE_URL)) {
         $externalUrl = trim($row['URL']);
     }
-    // ==============================
 
     return [
         'id' => $row['NUM'],
@@ -214,7 +241,6 @@ $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPost
     ];
 }, $rows);
 
-// Return paginated response
 echo json_encode([
     'movies' => $movies,
     'hasMore' => $hasMore,
