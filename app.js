@@ -9,6 +9,7 @@ const modal = document.getElementById('movie-modal');
 const closeModal = document.getElementById('close-modal');
 const modalBody = document.getElementById('modal-body');
 const sortSelect = document.getElementById('sort-select');
+const genreFilters = document.getElementById('genre-filters');
 
 // Paripakva archive mode is toggled via Ctrl+Shift+K keyboard shortcut
 
@@ -20,8 +21,9 @@ let currentOffset = 0;
 let hasMoreResults = true;
 let isLoading = false;
 const currentLimit = 50;
-let showParipakva = false; // archive/18+ content toggle (Ctrl+Shift+K)
-let currentSort = 'num_asc'; // current sort order
+let showParipakva = false;
+let currentSort = 'num_asc';
+let currentCategory = '';
 
 // --- Helper: Create DOM Element ---
 function createElement(tag, className = '', textContent = '', attributes = {}) {
@@ -47,10 +49,8 @@ function escapeHtml(str) {
 
 // --- Helper: Show loading spinner ---
 function showLoadingSpinner() {
-    // Remove existing spinner if any
     const existing = contentArea.querySelector('.loading-spinner');
     if (existing) existing.remove();
-
     const spinner = createElement('div', 'loading-spinner');
     spinner.innerHTML = `
         <div class="spinner"></div>
@@ -65,6 +65,56 @@ function hideLoadingSpinner() {
     if (spinner) spinner.remove();
 }
 
+// --- Fetch and render genre filter chips ---
+async function fetchCategories() {
+    try {
+        const includeArchive = showParipakva ? 1 : 0;
+        const response = await fetch(`api.php?action=categories&archive=${includeArchive}`);
+        if (!response.ok) return;
+        const result = await response.json();
+        const categories = result.categories || [];
+        renderGenreChips(categories);
+    } catch (err) {
+        console.warn('Failed to load categories:', err);
+    }
+}
+
+// --- Render genre chips ---
+function renderGenreChips(categories) {
+    clearContainer(genreFilters);
+
+    const allChip = createElement('button', 'genre-chip' + (currentCategory === '' ? ' active' : ''), 'All');
+    allChip.addEventListener('click', () => {
+        currentCategory = '';
+        updateActiveChip();
+        fetchMovies(searchInput.value, 0, false);
+    });
+    genreFilters.appendChild(allChip);
+
+    categories.forEach(cat => {
+        const chip = createElement('button', 'genre-chip' + (currentCategory === cat ? ' active' : ''), cat);
+        chip.addEventListener('click', () => {
+            if (currentCategory === cat) {
+                currentCategory = '';
+            } else {
+                currentCategory = cat;
+            }
+            updateActiveChip();
+            fetchMovies(searchInput.value, 0, false);
+        });
+        genreFilters.appendChild(chip);
+    });
+}
+
+// --- Update active chip styling ---
+function updateActiveChip() {
+    genreFilters.querySelectorAll('.genre-chip').forEach(chip => {
+        const isActive = (currentCategory === '' && chip.textContent === 'All') ||
+                         (chip.textContent === currentCategory);
+        chip.classList.toggle('active', isActive);
+    });
+}
+
 // --- Fetch Movies from API ---
 async function fetchMovies(query = '', offset = 0, append = false) {
     if (isLoading) return;
@@ -75,14 +125,13 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             clearContainer(contentArea);
             currentOffset = 0;
             hasMoreResults = true;
-            // Show loading spinner for initial load
             showLoadingSpinner();
         }
 
         const includeArchive = showParipakva ? 1 : 0;
 
         const response = await fetch(
-            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}&sort=${encodeURIComponent(currentSort)}`
+            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}&sort=${encodeURIComponent(currentSort)}&category=${encodeURIComponent(currentCategory)}`
         );
         
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
@@ -90,7 +139,6 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         const movies = result.movies || [];
         hasMoreResults = result.hasMore === true;
 
-        // Hide loading spinner
         hideLoadingSpinner();
 
         // Display total results
@@ -102,7 +150,6 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             totalEl.textContent = '';
         }
 
-        // Remove loading indicator
         const loadingEl = contentArea.querySelector('.loading');
         if (loadingEl) loadingEl.remove();
 
@@ -173,8 +220,6 @@ function renderGrid(movies, append = false) {
         const card = createElement('div','movie-card');
         card.dataset.num = movie.num;
 
-        /* POSTER WRAPPER */
-
         const posterWrapper = createElement('div','poster-wrapper loading');
 
         const glow = createElement('div','poster-glow');
@@ -188,10 +233,8 @@ function renderGrid(movies, append = false) {
         img.alt = movie.formattedtitle || movie.title || 'Movie Poster';
 
         img.onload = () => {
-
             posterWrapper.classList.remove('loading');
             posterWrapper.classList.add('loaded');
-
             try{
                 getPosterGlow(img, glow);
             }catch(e){
@@ -199,7 +242,6 @@ function renderGrid(movies, append = false) {
             }
         };
         
-        // Add source badge
         if (movie.source === 'paripakva') {
             const sourceBadge = createElement('div','movie-badge badge-source','18+');
             sourceBadge.style.backgroundColor = 'purple';
@@ -211,15 +253,11 @@ function renderGrid(movies, append = false) {
 
         /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
 
-        /* BADGES */
-
         const createBadge = (text, cls) => {
             const badge = createElement('div',`movie-badge ${cls}`);
             badge.textContent = text;
             return badge;
         };
-
-        /* CERTIFICATION */
 
         if(movie.certification){
             posterWrapper.appendChild(
@@ -227,38 +265,28 @@ function renderGrid(movies, append = false) {
             );
         }
 
-        /* LENGTH */
-
         if(movie.length){
             posterWrapper.appendChild(
                 createBadge(`⏱ ${movie.length}`,'badge-length')
             );
         }
 
-        /* RATING */
-
         const ratingVal = parseFloat(movie.rating) || 0;
 
         if(ratingVal > 0){
-
             const ratingBadge = createBadge(`⭐ ${ratingVal.toFixed(1)}`,'badge-rating');
 
             if(movie.external_url){
-
                 ratingBadge.style.cursor='pointer';
                 ratingBadge.title='Open external rating';
-
                 ratingBadge.addEventListener('click',e=>{
                     e.stopPropagation();
                     window.open(movie.external_url,'_blank');
                 });
-
             }
 
             posterWrapper.appendChild(ratingBadge);
         }
-
-        /* YEAR */
 
         if(movie.year){
             posterWrapper.appendChild(
@@ -266,7 +294,6 @@ function renderGrid(movies, append = false) {
             );
         }
 
-        // --- Hover Info (Netflix-style) ---
         const hoverInfo = createElement('div', 'hover-info');
         const descSize = 180;
         hoverInfo.textContent = movie.description 
@@ -274,8 +301,6 @@ function renderGrid(movies, append = false) {
             : 'No description available.';
         posterWrapper.appendChild(hoverInfo);
         
-        /* INFO SECTION */
-
         const info = createElement('div','card-info');
 
         const titleText = `${movie.num} - ${movie.title}`;
@@ -322,12 +347,10 @@ function getPosterGlow(img, glowEl){
     let r=0,g=0,b=0,count=0;
 
     for(let i=0;i<pixels.length;i+=4){
-
         r+=pixels[i];
         g+=pixels[i+1];
         b+=pixels[i+2];
         count++;
-
     }
 
     r=Math.floor(r/count);
@@ -393,7 +416,6 @@ function renderTable(movies, append = false) {
             if (ratingVal === 0) tdRating.style.opacity = '0.5';
         }
         
-        // Add source badge for paripakva in table view
         if (movie.source === 'paripakva') {
             const sourceBadge = createElement('span', '', '18+');
             Object.assign(sourceBadge.style, {
@@ -418,23 +440,18 @@ function renderTable(movies, append = false) {
 function openModal(movie) {
     clearContainer(modalBody);
 
-    // Modal header (background poster)
     const header = createElement('div', 'modal-header');
     header.style.backgroundImage = `url(${movie.poster})`;
 
-    // Header top row (ID + title)
     const headerTop = createElement('div', 'modal-header-top');
     const title = createElement('h2');
     title.append(createElement('span', 'modal-num', `#${movie.num}`), document.createTextNode(movie.title));
     headerTop.appendChild(title);
 
-    // Modal content row: flex container
     const contentRow = createElement('div', 'modal-content-row');
 
-    // Poster (sticky on left)
     const posterWrapper = createElement('div', 'modal-poster-wrapper');
 
-    // Make poster clickable to open lightbox
     const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
     posterImg.style.cursor = 'pointer';
 
@@ -442,8 +459,6 @@ function openModal(movie) {
         const lightbox = document.getElementById('poster-lightbox');
         const lightboxImg = lightbox.querySelector('.lightbox-img');
         lightboxImg.src = movie.poster;
-
-        // Show with animation
         lightbox.classList.add('show');
     });
 
@@ -456,10 +471,8 @@ function openModal(movie) {
 
     contentRow.appendChild(posterWrapper);
 
-    // Details column (scrollable)
     const details = createElement('div', 'modal-details');
 
-    // Meta info
     const meta = createElement('div', 'modal-meta');
     if (movie.year) meta.appendChild(createElement('span', '', movie.year));
     if (movie.genre) meta.appendChild(createElement('span', '', movie.genre));
@@ -484,7 +497,6 @@ function openModal(movie) {
     if (rating.href) rating.style.cursor = 'pointer';
     meta.appendChild(rating);
 
-    // Synopsis / director / cast
     details.append(
         meta,
         createElement('span', 'modal-label', 'SYNOPSIS'),
@@ -495,7 +507,6 @@ function openModal(movie) {
         createElement('p', 'modal-cast', movie.actors || 'Unknown')
     );
 
-    // Tech details
     const techSection = createElement('div', 'tech-details');
     const inlineRow = createElement('div', 'tech-row-inline');
 
@@ -509,7 +520,6 @@ function openModal(movie) {
     inlineRow.append(sizeItem, resolutionItem, audioItem);
     techSection.appendChild(inlineRow);
 
-    // File row
     if (movie.filepath) {
         const fullPath = movie.filepath.replace(/\\/g, '/');
         const lastSlash = fullPath.lastIndexOf('/');
@@ -616,7 +626,6 @@ backToTopBtn.addEventListener('click', () => {
 });
 document.body.appendChild(backToTopBtn);
 
-// Show/hide based on scroll position
 contentArea.addEventListener('scroll', () => {
     if (contentArea.scrollTop > 400) {
         backToTopBtn.classList.add('visible');
@@ -635,6 +644,8 @@ function createCertificationBadge(certText) {
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
         showParipakva = !showParipakva;
+        currentCategory = '';
+        fetchCategories();
         fetchMovies(searchInput.value, 0, false);
         console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
     }
@@ -642,4 +653,5 @@ document.addEventListener('keydown', (e) => {
 
 
 // --- Initial Load ---
+fetchCategories();
 fetchMovies('', 0, false);
