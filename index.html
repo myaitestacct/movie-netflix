@@ -16,6 +16,18 @@
     <nav class="glass-panel navbar">
         <div class="controls">
             <input type="text" id="search-input" placeholder="Search title or category..." autocomplete="off">
+            <div class="sort-controls">
+                <label for="sort-select" class="sort-label">Sort:</label>
+                <select id="sort-select">
+                    <option value="num_asc" selected># (Default)</option>
+                    <option value="title_asc">Title A→Z</option>
+                    <option value="title_desc">Title Z→A</option>
+                    <option value="year_desc">Year (Newest)</option>
+                    <option value="year_asc">Year (Oldest)</option>
+                    <option value="rating_desc">Rating (Highest)</option>
+                    <option value="rating_asc">Rating (Lowest)</option>
+                </select>
+            </div>
             <div class="view-toggles">
                 <button id="btn-grid" class="active" title="Card View">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
