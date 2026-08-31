@@ -497,7 +497,6 @@ dialog[open] {
 /* Poster */
 .modal-img {
     width: 350px;
-    /*height: 375px;*/
     object-fit: cover;
     border-radius: 8px;
     box-shadow: 0 25px 60px rgba(0,0,0,0.9);
@@ -776,8 +775,8 @@ dialog[open] .tech-icon {
 ========================= */
 .cert-badge {
     position: absolute;
-    top: 10px;        /* offset from top of poster */
-    left: -30px;      /* offset from left */
+    top: 10px;
+    left: -30px;
     background: var(--accent);
     color: white;
     font-size: 0.8rem;
@@ -788,7 +787,6 @@ dialog[open] .tech-icon {
     pointer-events: none;
     z-index: 5;
     white-space: nowrap;
-    /* Pulse animation */
     animation: badgePulse 1.8s infinite alternate;
 }
 @keyframes badgePulse {
@@ -805,13 +803,13 @@ dialog[open] .tech-icon {
 
 .cert-badge-rect {
     stroke: currentColor;
-    fill: rgba(229, 9, 20, 0.15); /* subtle red fill */
+    fill: rgba(229, 9, 20, 0.15);
     stroke-width: 2;
 }
 
 .cert-badge-text {
     fill: currentColor;
-    font-size: 12px; /* scales nicely in larger badge */
+    font-size: 12px;
     font-weight: 700;
     font-family: 'Poppins', sans-serif;
     pointer-events: none;
@@ -850,7 +848,6 @@ dialog[open] .tech-icon {
 }
 
 .tech-file-name {
-    /*font-family: monospace;*/
     font-size: 0.9rem;
     color: #fff;
     flex: 1;
@@ -879,9 +876,9 @@ dialog[open] .tech-icon {
 
 /* Allow modal itself to scroll if content overflows */
 #movie-modal {
-    overflow-y: auto;      /* enable vertical scrolling */
-    max-height: 92vh;      /* keep modal within viewport */
-    z-index: 1000; /* modal is high, but lightbox higher */
+    overflow-y: auto;
+    max-height: 92vh;
+    z-index: 1000;
 }
 
 /* REMOVE any max-height from modal-header */
@@ -908,7 +905,7 @@ dialog[open] .tech-icon {
     background: rgba(255,255,255,0.35);
 }
 #modal-body {
-    box-shadow: inset 0 5px 10px rgba(0, 0, 0, 0.2);  /* Optional shadow for better scroll feedback */
+    box-shadow: inset 0 5px 10px rgba(0, 0, 0, 0.2);
     overflow: visible;
 }
 
@@ -917,7 +914,7 @@ dialog[open] .tech-icon {
     display: flex;
     gap: 2rem;
     overflow: hidden;
-    max-height: none; /* total scrollable area inside modal */
+    max-height: none;
 }
 
 /* Poster sticky */
@@ -933,7 +930,7 @@ dialog[open] .tech-icon {
     flex: 1;
     overflow-y: auto;
     max-height: none;
-    padding-right: 1rem; /* scrollbar padding */
+    padding-right: 1rem;
 }
 
 /* Ensure bottom content fully visible */
@@ -1044,7 +1041,7 @@ font-size:.75rem;
 
 /* Lightbox animations */
 .poster-lightbox {
-    position: fixed !important; /* already fixed, but force */
+    position: fixed !important;
     top: 0;
     left: 0;
     width: 100vw;
@@ -1053,7 +1050,7 @@ font-size:.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 5000 !important; /* higher than modal */
+    z-index: 5000 !important;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -1148,4 +1145,46 @@ font-size:.75rem;
     to {
         opacity: 1;
     }
+}
+
+/* =========================
+   BACK TO TOP BUTTON
+========================= */
+.back-to-top-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(229, 9, 20, 0.4);
+    z-index: 900;
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease, background 0.2s ease;
+}
+
+.back-to-top-btn.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+}
+
+.back-to-top-btn:hover {
+    background: #ff1f2b;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 25px rgba(229, 9, 20, 0.6);
+}
+
+.back-to-top-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(229, 9, 20, 0.4);
 }
