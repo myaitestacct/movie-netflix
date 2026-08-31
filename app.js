@@ -43,6 +43,26 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// --- Helper: Show loading spinner ---
+function showLoadingSpinner() {
+    // Remove existing spinner if any
+    const existing = contentArea.querySelector('.loading-spinner');
+    if (existing) existing.remove();
+
+    const spinner = createElement('div', 'loading-spinner');
+    spinner.innerHTML = `
+        <div class="spinner"></div>
+        <div class="spinner-text">Loading movies...</div>
+    `;
+    contentArea.appendChild(spinner);
+}
+
+// --- Helper: Hide loading spinner ---
+function hideLoadingSpinner() {
+    const spinner = contentArea.querySelector('.loading-spinner');
+    if (spinner) spinner.remove();
+}
+
 // --- Fetch Movies from API ---
 async function fetchMovies(query = '', offset = 0, append = false) {
     if (isLoading) return;
@@ -53,6 +73,8 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             clearContainer(contentArea);
             currentOffset = 0;
             hasMoreResults = true;
+            // Show loading spinner for initial load
+            showLoadingSpinner();
         }
 
         const includeArchive = showParipakva ? 1 : 0;
@@ -65,6 +87,9 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         const result = await response.json();
         const movies = result.movies || [];
         hasMoreResults = result.hasMore === true;
+
+        // Hide loading spinner
+        hideLoadingSpinner();
 
         // Display total results
         const totalEl = document.getElementById('search-results-count');
@@ -100,6 +125,7 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         currentOffset = result.nextOffset || offset + movies.length;
     } catch (err) {
         console.error('Fetch error:', err);
+        hideLoadingSpinner();
         if (!append) {
             clearContainer(contentArea);
             const errEl = createElement('div', 'error', 'Error: ' + err.message);
