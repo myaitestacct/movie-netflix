@@ -69,6 +69,26 @@ if ($offset < 0) $offset = 0;
 $query = str_replace("\0", '', $query);
 $query = mb_substr($query, 0, 200);
 
+// ===== SORT PARAMETER =====
+$sort = isset($_GET['sort']) ? trim($_GET['sort']) : 'num_asc';
+
+$allowedSorts = [
+    'num_asc'      => 'NUM ASC',
+    'num_desc'     => 'NUM DESC',
+    'title_asc'    => 'FORMATTEDTITLE ASC',
+    'title_desc'   => 'FORMATTEDTITLE DESC',
+    'year_asc'     => 'YEAR ASC',
+    'year_desc'    => 'YEAR DESC',
+    'rating_asc'   => 'COALESCE(NULLIF(USERRATING, \'\'), RATING) ASC',
+    'rating_desc'  => 'COALESCE(NULLIF(USERRATING, \'\'), RATING) DESC',
+];
+
+if (!array_key_exists($sort, $allowedSorts)) {
+    $sort = 'num_asc';
+}
+
+$orderBy = $allowedSorts[$sort];
+
 // Build query with pagination
 $sql = "SELECT 
             NUM, 
@@ -92,7 +112,7 @@ $sql = "SELECT
         FROM $tableToQuery
         WHERE FORMATTEDTITLE LIKE :search1 
         OR CATEGORY LIKE :search2 
-        ORDER BY NUM ASC 
+        ORDER BY $orderBy 
         LIMIT :limit OFFSET :offset";
 
 try {
@@ -173,7 +193,7 @@ $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPost
 
     return [
         'id' => $row['NUM'],
-        'num' => $row['NUM'],  // ← Explicit NUM field for frontend
+        'num' => $row['NUM'],
         'title' => $row['FORMATTEDTITLE'],
         'year' => $row['YEAR'] ?? 'N/A',
         'genre' => $row['CATEGORY'] ?? 'Unknown',
@@ -202,5 +222,6 @@ echo json_encode([
     'count' => count($movies),
     'limit' => $limit,
     'offset' => $offset,
-    'totalMatches' => $totalMatches
+    'totalMatches' => $totalMatches,
+    'sort' => $sort
 ]);
