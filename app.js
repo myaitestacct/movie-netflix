@@ -21,9 +21,36 @@ let currentOffset = 0;
 let hasMoreResults = true;
 let isLoading = false;
 const currentLimit = 50;
-let showParipakva = false;
-let currentSort = 'num_asc';
-let currentCategory = '';
+let showParipakva = false; // archive/18+ content toggle (Ctrl+Shift+K)
+let currentSort = 'num_asc'; // current sort order
+let currentCategory = ''; // current genre filter ('' = all)
+const FAVORITES_KEY = 'movielib_favorites';
+
+// --- Helper: Get favorites from localStorage ---
+function getFavorites() {
+    try {
+        return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+// --- Helper: Toggle a movie in favorites ---
+function toggleFavorite(num) {
+    let favs = getFavorites();
+    if (favs.includes(num)) {
+        favs = favs.filter(n => n !== num);
+    } else {
+        favs.push(num);
+    }
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+    return favs.includes(num);
+}
+
+// --- Helper: Check if a movie is a favorite ---
+function isFavorite(num) {
+    return getFavorites().includes(num);
+}
 
 // --- Helper: Create DOM Element ---
 function createElement(tag, className = '', textContent = '', attributes = {}) {
@@ -70,7 +97,8 @@ function updateURL() {
     const params = new URLSearchParams();
     if (searchInput.value) params.set('q', searchInput.value);
     if (currentSort !== 'num_asc') params.set('sort', currentSort);
-    if (currentCategory) params.set('genre', currentCategory);
+    if (currentCategory === '__favorites__') params.set('favs', '1');
+    else if (currentCategory) params.set('genre', currentCategory);
     if (showParipakva) params.set('archive', '1');
 
     const hash = params.toString();
@@ -80,7 +108,7 @@ function updateURL() {
 
 // --- URL State: Restore state from URL hash ---
 function loadFromURL() {
-    const hash = window.location.hash.slice(1);
+    const hash = window.location.hash.slice(1); // remove #
     if (!hash) return false;
 
     const params = new URLSearchParams(hash);
@@ -88,12 +116,14 @@ function loadFromURL() {
     const sort = params.get('sort') || 'num_asc';
     const genre = params.get('genre') || '';
     const archive = params.get('archive') || '0';
+    const favs = params.get('favs') || '0';
 
     searchInput.value = q;
     currentSort = sort;
-    currentCategory = genre;
+    currentCategory = favs === '1' ? '__favorites__' : genre;
     showParipakva = archive === '1';
 
+    // Sync sort dropdown
     sortSelect.value = currentSort;
 
     return true;
@@ -117,6 +147,7 @@ async function fetchCategories() {
 function renderGenreChips(categories) {
     clearContainer(genreFilters);
 
+    // "All" chip
     const allChip = createElement('button', 'genre-chip' + (currentCategory === '' ? ' active' : ''), 'All');
     allChip.addEventListener('click', () => {
         currentCategory = '';
@@ -124,6 +155,20 @@ function renderGenreChips(categories) {
         fetchMovies(searchInput.value, 0, false);
     });
     genreFilters.appendChild(allChip);
+
+    // "♥ Favorites" chip
+    const favCount = getFavorites().length;
+    const favChip = createElement('button', 'genre-chip fav-chip' + (currentCategory === '__favorites__' ? ' active' : ''), `♥ Favorites${favCount > 0 ? ' (' + favCount + ')' : ''}`);
+    favChip.addEventListener('click', () => {
+        if (currentCategory === '__favorites__') {
+            currentCategory = '';
+        } else {
+            currentCategory = '__favorites__';
+        }
+        updateActiveChip();
+        fetchMovies(searchInput.value, 0, false);
+    });
+    genreFilters.appendChild(favChip);
 
     categories.forEach(cat => {
         const chip = createElement('button', 'genre-chip' + (currentCategory === cat ? ' active' : ''), cat);
@@ -143,8 +188,12 @@ function renderGenreChips(categories) {
 // --- Update active chip styling ---
 function updateActiveChip() {
     genreFilters.querySelectorAll('.genre-chip').forEach(chip => {
-        const isActive = (currentCategory === '' && chip.textContent === 'All') ||
-                         (chip.textContent === currentCategory);
+        const isAll = chip.textContent === 'All';
+        const isFav = chip.classList.contains('fav-chip');
+        let isActive = false;
+        if (currentCategory === '' && isAll) isActive = true;
+        else if (currentCategory === '__favorites__' && isFav) isActive = true;
+        else if (chip.textContent === currentCategory) isActive = true;
         chip.classList.toggle('active', isActive);
     });
 }
@@ -164,8 +213,17 @@ async function fetchMovies(query = '', offset = 0, append = false) {
 
         const includeArchive = showParipakva ? 1 : 0;
 
+        // Build category parameter
+        let categoryParam = currentCategory;
+        let favsParam = '';
+        if (currentCategory === '__favorites__') {
+            categoryParam = '';
+            const favIds = getFavorites();
+            favsParam = favIds.join(',');
+        }
+
         const response = await fetch(
-            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}&sort=${encodeURIComponent(currentSort)}&category=${encodeURIComponent(currentCategory)}`
+            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}&sort=${encodeURIComponent(currentSort)}&category=${encodeURIComponent(categoryParam)}&favs=${encodeURIComponent(favsParam)}`
         );
         
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
@@ -177,25 +235,89 @@ async function fetchMovies(query = '', offset = 0, append = false) {
 
         // Display total results
         const totalEl = document.getElementById('search-results-count');
-        const shownCount = append ? currentOffset + movies.length : movies.length;
-
-        if (query && currentCategory) {
+        if (query && currentCategory === '__favorites__') {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} favorite(s) matching "${query}"`;
+        } else if (query && currentCategory) {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
             totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}" in ${currentCategory}`;
         } else if (query) {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
             totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}"`;
+        } else if (currentCategory === '__favorites__') {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} favorite(s)`;
         } else if (currentCategory) {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
             totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} in ${currentCategory}`;
         } else {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
             totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} movies`;
         }
 
+        // Remove loading indicator
         const loadingEl = contentArea.querySelector('.loading');
         if (loadingEl) loadingEl.remove();
 
         if (!append && movies.length === 0) {
-            const msg = createElement('div', 'no-results', query ? 'No matches found in library.' : 'Start typing to search...');
-            Object.assign(msg.style, { gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' });
-            contentArea.appendChild(msg);
+            const noResultsDiv = createElement('div', 'no-results');
+            const noResultsMessage = query ? `No movies found for "${query}". Try a different search or genre.` : 'No movies available. Start typing to search...';
+            
+            noResultsDiv.innerHTML = `
+                <div class="no-results-illustration">
+                    <svg width="180" height="160" viewBox="0 0 180 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Film reel -->
+                        <rect x="50" y="30" width="80" height="100" rx="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+                        <circle cx="65" cy="45" r="5" fill="rgba(229,9,20,0.4)"/>
+                        <circle cx="90" cy="45" r="5" fill="rgba(229,9,20,0.3)"/>
+                        <circle cx="115" cy="45" r="5" fill="rgba(229,9,20,0.4)"/>
+                        <circle cx="65" cy="115" r="5" fill="rgba(229,9,20,0.3)"/>
+                        <circle cx="90" cy="115" r="5" fill="rgba(229,9,20,0.4)"/>
+                        <circle cx="115" cy="115" r="5" fill="rgba(229,9,20,0.3)"/>
+                        <!-- Magnifying glass -->
+                        <circle cx="90" cy="75" r="22" stroke="rgba(255,255,255,0.25)" stroke-width="3" fill="none"/>
+                        <line x1="106" y1="91" x2="120" y2="105" stroke="rgba(255,255,255,0.25)" stroke-width="3" stroke-linecap="round"/>
+                        <!-- Question mark inside glass -->
+                        <text x="82" y="83" font-size="24" font-weight="bold" fill="rgba(229,9,20,0.6)">?</text>
+                        <!-- Stars -->
+                        <circle cx="25" cy="50" r="2" fill="rgba(255,255,255,0.2)"/>
+                        <circle cx="155" cy="40" r="1.5" fill="rgba(255,255,255,0.15)"/>
+                        <circle cx="30" cy="110" r="1" fill="rgba(255,255,255,0.1)"/>
+                        <circle cx="150" cy="120" r="2" fill="rgba(255,255,255,0.15)"/>
+                    </svg>
+                </div>
+                <h2 class="no-results-title">No results found</h2>
+                <p class="no-results-message">${noResultsMessage}</p>
+                <div class="no-results-tips">
+                    <span class="tip-label">Tips:</span>
+                    <ul>
+                        <li>Check for typos in your search</li>
+                        <li>Try broader keywords</li>
+                        <li>Try a different genre filter</li>
+                        <li>Check a different sort order</li>
+                    </ul>
+                </div>
+                <button class="no-results-reset-btn">Clear Search &amp; Filters</button>
+            `;
+            
+            Object.assign(noResultsDiv.style, { gridColumn: '1 / -1' });
+            contentArea.appendChild(noResultsDiv);
+            
+            // Attach reset button handler
+            const resetBtn = noResultsDiv.querySelector('.no-results-reset-btn');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    currentQuery = '';
+                    currentCategory = '';
+                    searchInput.value = '';
+                    renderGenreChips();
+                    sortSelect.value = 'num_asc';
+                    currentSort = 'num_asc';
+                    currentOffset = 0;
+                    fetchMovies('', 0, false);
+                });
+            }
+            
             isLoading = false;
             return;
         }
@@ -211,6 +333,8 @@ async function fetchMovies(query = '', offset = 0, append = false) {
 
         currentQuery = query;
         currentOffset = result.nextOffset || offset + movies.length;
+
+        // Save state to URL
         updateURL();
     } catch (err) {
         console.error('Fetch error:', err);
@@ -266,6 +390,8 @@ function renderGrid(movies, append = false) {
         const card = createElement('div','movie-card');
         card.dataset.num = movie.num;
 
+        /* POSTER WRAPPER */
+
         const posterWrapper = createElement('div','poster-wrapper loading');
 
         const glow = createElement('div','poster-glow');
@@ -279,7 +405,7 @@ function renderGrid(movies, append = false) {
         img.alt = movie.formattedtitle || movie.title || 'Movie Poster';
 
         img.onerror = () => {
-            img.onerror = null;
+            img.onerror = null; // prevent infinite loop
             img.src = 'data:image/svg+xml,' + encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300">
                     <rect width="200" height="300" fill="#1a1a1a"/>
@@ -294,10 +420,11 @@ function renderGrid(movies, append = false) {
             posterWrapper.classList.remove('loading');
             posterWrapper.classList.add('loaded');
         };
-        
+
         img.onload = () => {
             posterWrapper.classList.remove('loading');
             posterWrapper.classList.add('loaded');
+
             try{
                 getPosterGlow(img, glow);
             }catch(e){
@@ -305,6 +432,7 @@ function renderGrid(movies, append = false) {
             }
         };
         
+        // Add source badge
         if (movie.source === 'paripakva') {
             const sourceBadge = createElement('div','movie-badge badge-source','18+');
             sourceBadge.style.backgroundColor = 'purple';
@@ -316,11 +444,15 @@ function renderGrid(movies, append = false) {
 
         /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
 
+        /* BADGES */
+
         const createBadge = (text, cls) => {
             const badge = createElement('div',`movie-badge ${cls}`);
             badge.textContent = text;
             return badge;
         };
+
+        /* CERTIFICATION */
 
         if(movie.certification){
             posterWrapper.appendChild(
@@ -328,28 +460,38 @@ function renderGrid(movies, append = false) {
             );
         }
 
+        /* LENGTH */
+
         if(movie.length){
             posterWrapper.appendChild(
                 createBadge(`⏱ ${movie.length}`,'badge-length')
             );
         }
 
+        /* RATING */
+
         const ratingVal = parseFloat(movie.rating) || 0;
 
         if(ratingVal > 0){
+
             const ratingBadge = createBadge(`⭐ ${ratingVal.toFixed(1)}`,'badge-rating');
 
             if(movie.external_url){
+
                 ratingBadge.style.cursor='pointer';
                 ratingBadge.title='Open external rating';
+
                 ratingBadge.addEventListener('click',e=>{
                     e.stopPropagation();
                     window.open(movie.external_url,'_blank');
                 });
+
             }
 
             posterWrapper.appendChild(ratingBadge);
         }
+
+        /* YEAR */
 
         if(movie.year){
             posterWrapper.appendChild(
@@ -357,6 +499,7 @@ function renderGrid(movies, append = false) {
             );
         }
 
+        // --- Hover Info (Netflix-style) ---
         const hoverInfo = createElement('div', 'hover-info');
         const descSize = 180;
         hoverInfo.textContent = movie.description 
@@ -364,6 +507,8 @@ function renderGrid(movies, append = false) {
             : 'No description available.';
         posterWrapper.appendChild(hoverInfo);
         
+        /* INFO SECTION */
+
         const info = createElement('div','card-info');
 
         const titleText = `${movie.num} - ${movie.title}`;
@@ -383,6 +528,21 @@ function renderGrid(movies, append = false) {
         info.append(title,meta);
 
         card.append(posterWrapper,info);
+
+        // Favorite heart button
+        const favBtn = createElement('button', 'fav-btn' + (isFavorite(movie.num) ? ' active' : ''), '♥');
+        favBtn.title = isFavorite(movie.num) ? 'Remove from favorites' : 'Add to favorites';
+        favBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowFav = toggleFavorite(movie.num);
+            favBtn.classList.toggle('active', nowFav);
+            favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+            // If viewing favorites, refresh the list
+            if (currentCategory === '__favorites__') {
+                fetchMovies(searchInput.value, 0, false);
+            }
+        });
+        card.appendChild(favBtn);
 
         card.addEventListener('click',()=>openModal(movie));
 
@@ -410,10 +570,12 @@ function getPosterGlow(img, glowEl){
     let r=0,g=0,b=0,count=0;
 
     for(let i=0;i<pixels.length;i+=4){
+
         r+=pixels[i];
         g+=pixels[i+1];
         b+=pixels[i+2];
         count++;
+
     }
 
     r=Math.floor(r/count);
@@ -435,7 +597,7 @@ function renderTable(movies, append = false) {
         tbody = createElement('tbody');
 
         const headerRow = createElement('tr');
-        ['#', 'Cover', 'Title', 'Certification', 'Year', 'Category', 'Rating'].forEach(h => {
+        ['', '#', 'Cover', 'Title', 'Certification', 'Year', 'Category', 'Rating'].forEach(h => {
             headerRow.appendChild(createElement('th', '', h));
         });
         thead.appendChild(headerRow);
@@ -447,6 +609,21 @@ function renderTable(movies, append = false) {
     movies.forEach(movie => {
         const row = createElement('tr');
         row.dataset.num = movie.num;
+
+        // Favorite heart cell
+        const tdFav = createElement('td');
+        const favBtn = createElement('button', 'fav-btn' + (isFavorite(movie.num) ? ' active' : ''), '♥');
+        favBtn.title = isFavorite(movie.num) ? 'Remove from favorites' : 'Add to favorites';
+        favBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowFav = toggleFavorite(movie.num);
+            favBtn.classList.toggle('active', nowFav);
+            favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+            if (currentCategory === '__favorites__') {
+                fetchMovies(searchInput.value, 0, false);
+            }
+        });
+        tdFav.appendChild(favBtn);
 
         const tdNum = createElement('td', 'num-cell', `#${movie.num}`);
         Object.assign(tdNum.style, { fontWeight: '600', color: 'var(--accent)', minWidth: '50px' });
@@ -488,6 +665,7 @@ function renderTable(movies, append = false) {
             if (ratingVal === 0) tdRating.style.opacity = '0.5';
         }
         
+        // Add source badge for paripakva in table view
         if (movie.source === 'paripakva') {
             const sourceBadge = createElement('span', '', '18+');
             Object.assign(sourceBadge.style, {
@@ -502,7 +680,7 @@ function renderTable(movies, append = false) {
             tdTitle.appendChild(sourceBadge);
         }
 
-        row.append(tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
+        row.append(tdFav, tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
         row.addEventListener('click', () => openModal(movie));
         tbody.appendChild(row);
     });
@@ -512,18 +690,23 @@ function renderTable(movies, append = false) {
 function openModal(movie) {
     clearContainer(modalBody);
 
+    // Modal header (background poster)
     const header = createElement('div', 'modal-header');
     header.style.backgroundImage = `url(${movie.poster})`;
 
+    // Header top row (ID + title)
     const headerTop = createElement('div', 'modal-header-top');
     const title = createElement('h2');
     title.append(createElement('span', 'modal-num', `#${movie.num}`), document.createTextNode(movie.title));
     headerTop.appendChild(title);
 
+    // Modal content row: flex container
     const contentRow = createElement('div', 'modal-content-row');
 
+    // Poster (sticky on left)
     const posterWrapper = createElement('div', 'modal-poster-wrapper');
 
+    // Make poster clickable to open lightbox
     const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
     posterImg.style.cursor = 'pointer';
 
@@ -546,6 +729,8 @@ function openModal(movie) {
         const lightbox = document.getElementById('poster-lightbox');
         const lightboxImg = lightbox.querySelector('.lightbox-img');
         lightboxImg.src = movie.poster;
+
+        // Show with animation
         lightbox.classList.add('show');
     });
 
@@ -558,8 +743,10 @@ function openModal(movie) {
 
     contentRow.appendChild(posterWrapper);
 
+    // Details column (scrollable)
     const details = createElement('div', 'modal-details');
 
+    // Meta info
     const meta = createElement('div', 'modal-meta');
     if (movie.year) meta.appendChild(createElement('span', '', movie.year));
     if (movie.genre) meta.appendChild(createElement('span', '', movie.genre));
@@ -584,6 +771,7 @@ function openModal(movie) {
     if (rating.href) rating.style.cursor = 'pointer';
     meta.appendChild(rating);
 
+    // Synopsis / director / cast
     details.append(
         meta,
         createElement('span', 'modal-label', 'SYNOPSIS'),
@@ -594,6 +782,7 @@ function openModal(movie) {
         createElement('p', 'modal-cast', movie.actors || 'Unknown')
     );
 
+    // Tech details
     const techSection = createElement('div', 'tech-details');
     const inlineRow = createElement('div', 'tech-row-inline');
 
@@ -607,6 +796,7 @@ function openModal(movie) {
     inlineRow.append(sizeItem, resolutionItem, audioItem);
     techSection.appendChild(inlineRow);
 
+    // File row
     if (movie.filepath) {
         const fullPath = movie.filepath.replace(/\\/g, '/');
         const lastSlash = fullPath.lastIndexOf('/');
@@ -698,8 +888,6 @@ closeModal.addEventListener('click', smoothClose);
 modal.addEventListener('click', e => { if (e.target === modal) smoothClose(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open) smoothClose(); });
 
-// Lightbox functionality is handled inline in openModal()
-
 // --- Back to Top Button ---
 const backToTopBtn = createElement('button', 'back-to-top-btn');
 backToTopBtn.innerHTML = `
@@ -713,11 +901,24 @@ backToTopBtn.addEventListener('click', () => {
 });
 document.body.appendChild(backToTopBtn);
 
+// Show/hide based on scroll position + infinite scroll
 contentArea.addEventListener('scroll', () => {
     if (contentArea.scrollTop > 400) {
         backToTopBtn.classList.add('visible');
     } else {
         backToTopBtn.classList.remove('visible');
+    }
+
+    // Infinite scroll: auto-load when near bottom
+    const scrollThreshold = 300;
+    const distanceFromBottom = contentArea.scrollHeight - contentArea.scrollTop - contentArea.clientHeight;
+    if (distanceFromBottom < scrollThreshold && hasMoreResults && !isLoading) {
+        const loadBtn = contentArea.querySelector('.load-more-btn');
+        if (loadBtn && !loadBtn.disabled) {
+            loadBtn.disabled = true;
+            loadBtn.textContent = 'Loading...';
+            fetchMovies(currentQuery, currentOffset, true);
+        }
     }
 });
 
@@ -729,6 +930,7 @@ function createCertificationBadge(certText) {
 }
 
 document.addEventListener('keydown', (e) => {
+    // Ctrl+Shift+K: Toggle paripakva archive
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
         showParipakva = !showParipakva;
         currentCategory = '';
@@ -736,9 +938,71 @@ document.addEventListener('keydown', (e) => {
         fetchMovies(searchInput.value, 0, false);
         console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
     }
+
+    // ?: Show keyboard shortcuts overlay
+    if (e.key === '?' && !modal.open && document.activeElement !== searchInput) {
+        showShortcutsOverlay();
+    }
+
+    // / or Ctrl+K: Focus search input
+    if ((e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+    }
+
+    // Escape: Clear search if search is focused and has text
+    if (e.key === 'Escape' && document.activeElement === searchInput && searchInput.value) {
+        searchInput.value = '';
+        fetchMovies('', 0, false);
+        searchInput.blur();
+    }
+
+    // 1: Switch to grid view
+    if (e.key === '1' && document.activeElement !== searchInput) {
+        btnGrid.click();
+    }
+
+    // 2: Switch to list view
+    if (e.key === '2' && document.activeElement !== searchInput) {
+        btnList.click();
+    }
 });
 
+// --- Keyboard Shortcuts Overlay ---
+function showShortcutsOverlay() {
+    const existing = document.querySelector('.shortcuts-overlay');
+    if (existing) existing.remove();
+
+    const overlay = createElement('div', 'shortcuts-overlay');
+    overlay.innerHTML = `
+        <div class="shortcuts-panel">
+            <div class="shortcuts-header">
+                <h3>Keyboard Shortcuts</h3>
+                <button class="shortcuts-close">&times;</button>
+            </div>
+            <div class="shortcuts-body">
+                <div class="shortcut-row"><kbd>/</kbd> or <kbd>Ctrl+K</kbd> <span>Focus search</span></div>
+                <div class="shortcut-row"><kbd>Esc</kbd> <span>Clear search / Close modal</span></div>
+                <div class="shortcut-row"><kbd>1</kbd> <span>Grid view</span></div>
+                <div class="shortcut-row"><kbd>2</kbd> <span>List view</span></div>
+                <div class="shortcut-row"><kbd>Ctrl+Shift+K</kbd> <span>Toggle archive mode</span></div>
+                <div class="shortcut-row"><kbd>?</kbd> <span>Show this help</span></div>
+            </div>
+        </div>
+    `;
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.classList.contains('shortcuts-close')) {
+            overlay.remove();
+        }
+    });
+
+    document.body.appendChild(overlay);
+}
+
+
 // --- Initial Load ---
+// Restore state from URL hash (bookmarkable/shareable links)
 loadFromURL();
 fetchCategories();
 fetchMovies(searchInput.value, 0, false);
