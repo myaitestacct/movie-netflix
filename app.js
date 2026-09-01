@@ -129,6 +129,42 @@ function loadFromURL() {
     return true;
 }
 
+// --- Fetch and render stats dashboard ---
+async function fetchStats() {
+    const statsBar = document.getElementById('stats-bar');
+    if (!statsBar) return;
+    try {
+        const includeArchive = showParipakva ? 1 : 0;
+        const response = await fetch(`api.php?action=stats&archive=${includeArchive}`);
+        if (!response.ok) return;
+        const result = await response.json();
+        const favCount = getFavorites().length;
+        statsBar.innerHTML = `
+            <div class="stat-item">
+                <span class="stat-value">${result.totalMovies.toLocaleString()}</span>
+                <span class="stat-label">Total Movies</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span class="stat-value">${favCount}</span>
+                <span class="stat-label">Favorites</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span class="stat-value">⭐ ${result.avgRating}</span>
+                <span class="stat-label">Avg Rating</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span class="stat-value">${escapeHtml(result.topGenre)}</span>
+                <span class="stat-label">Top Genre (${result.topGenreCount})</span>
+            </div>
+        `;
+    } catch (err) {
+        console.warn('Failed to load stats:', err);
+    }
+}
+
 // --- Fetch and render genre filter chips ---
 async function fetchCategories() {
     try {
@@ -183,6 +219,48 @@ function renderGenreChips(categories) {
         });
         genreFilters.appendChild(chip);
     });
+}
+
+// --- Update breadcrumb navigation ---
+function updateBreadcrumb() {
+    const breadcrumb = document.getElementById('breadcrumb');
+    if (!breadcrumb) return;
+
+    if (currentCategory === '' && !searchInput.value) {
+        breadcrumb.innerHTML = '';
+        breadcrumb.style.display = 'none';
+        return;
+    }
+
+    breadcrumb.style.display = '';
+    let html = '<span class="breadcrumb-item breadcrumb-root" data-action="all">All</span>';
+
+    if (currentCategory === '__favorites__') {
+        html += '<span class="breadcrumb-sep">›</span>';
+        html += '<span class="breadcrumb-item breadcrumb-current">♥ Favorites</span>';
+    } else if (currentCategory) {
+        html += '<span class="breadcrumb-sep">›</span>';
+        html += `<span class="breadcrumb-item breadcrumb-current">${escapeHtml(currentCategory)}</span>`;
+    }
+
+    if (searchInput.value) {
+        html += '<span class="breadcrumb-sep">›</span>';
+        html += `<span class="breadcrumb-item breadcrumb-current">"${escapeHtml(searchInput.value)}"</span>`;
+    }
+
+    breadcrumb.innerHTML = html;
+
+    // "All" click resets everything
+    const rootLink = breadcrumb.querySelector('.breadcrumb-root');
+    if (rootLink) {
+        rootLink.addEventListener('click', () => {
+            currentCategory = '';
+            searchInput.value = '';
+            updateActiveChip();
+            updateBreadcrumb();
+            fetchMovies('', 0, false);
+        });
+    }
 }
 
 // --- Update active chip styling ---
@@ -319,6 +397,7 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             }
             
             isLoading = false;
+            updateBreadcrumb();
             return;
         }
 
@@ -333,6 +412,9 @@ async function fetchMovies(query = '', offset = 0, append = false) {
 
         currentQuery = query;
         currentOffset = result.nextOffset || offset + movies.length;
+
+        // Update breadcrumb
+        updateBreadcrumb();
 
         // Save state to URL
         updateURL();
@@ -442,8 +524,6 @@ function renderGrid(movies, append = false) {
 
         posterWrapper.appendChild(img);
 
-        /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
-
         /* BADGES */
 
         const createBadge = (text, cls) => {
@@ -537,6 +617,14 @@ function renderGrid(movies, append = false) {
             const nowFav = toggleFavorite(movie.num);
             favBtn.classList.toggle('active', nowFav);
             favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+            // Refresh stats and favorites chip count
+            fetchStats();
+            // Update favorites chip count
+            const favChipEl = genreFilters.querySelector('.fav-chip');
+            if (favChipEl) {
+                const cnt = getFavorites().length;
+                favChipEl.textContent = `♥ Favorites${cnt > 0 ? ' (' + cnt + ')' : ''}`;
+            }
             // If viewing favorites, refresh the list
             if (currentCategory === '__favorites__') {
                 fetchMovies(searchInput.value, 0, false);
@@ -619,6 +707,12 @@ function renderTable(movies, append = false) {
             const nowFav = toggleFavorite(movie.num);
             favBtn.classList.toggle('active', nowFav);
             favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+            fetchStats();
+            const favChipEl = genreFilters.querySelector('.fav-chip');
+            if (favChipEl) {
+                const cnt = getFavorites().length;
+                favChipEl.textContent = `♥ Favorites${cnt > 0 ? ' (' + cnt + ')' : ''}`;
+            }
             if (currentCategory === '__favorites__') {
                 fetchMovies(searchInput.value, 0, false);
             }
@@ -681,7 +775,20 @@ function renderTable(movies, append = false) {
         }
 
         row.append(tdFav, tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
+        row.dataset.poster = movie.poster;
         row.addEventListener('click', () => openModal(movie));
+
+        // Poster preview on hover
+        row.addEventListener('mouseenter', (e) => {
+            showTablePosterPreview(movie.poster, e);
+        });
+        row.addEventListener('mousemove', (e) => {
+            moveTablePosterPreview(e);
+        });
+        row.addEventListener('mouseleave', () => {
+            hideTablePosterPreview();
+        });
+
         tbody.appendChild(row);
     });
 }
@@ -729,8 +836,6 @@ function openModal(movie) {
         const lightbox = document.getElementById('poster-lightbox');
         const lightboxImg = lightbox.querySelector('.lightbox-img');
         lightboxImg.src = movie.poster;
-
-        // Show with animation
         lightbox.classList.add('show');
     });
 
@@ -968,6 +1073,71 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// --- Table Poster Preview on Hover ---
+let tablePreviewEl = null;
+
+function showTablePosterPreview(posterUrl, e) {
+    if (!posterUrl) return;
+    hideTablePosterPreview();
+    tablePreviewEl = document.createElement('div');
+    tablePreviewEl.className = 'table-poster-preview';
+    const img = document.createElement('img');
+    img.src = posterUrl;
+    img.alt = 'Poster preview';
+    tablePreviewEl.appendChild(img);
+    document.body.appendChild(tablePreviewEl);
+    moveTablePosterPreview(e);
+}
+
+function moveTablePosterPreview(e) {
+    if (!tablePreviewEl) return;
+    const previewWidth = 200;
+    const previewHeight = 300;
+    let x = e.clientX + 20;
+    let y = e.clientY - previewHeight / 2;
+    // Keep within viewport
+    if (x + previewWidth > window.innerWidth) x = e.clientX - previewWidth - 20;
+    if (y < 10) y = 10;
+    if (y + previewHeight > window.innerHeight) y = window.innerHeight - previewHeight - 10;
+    tablePreviewEl.style.left = x + 'px';
+    tablePreviewEl.style.top = y + 'px';
+}
+
+function hideTablePosterPreview() {
+    if (tablePreviewEl) {
+        tablePreviewEl.remove();
+        tablePreviewEl = null;
+    }
+}
+
+// --- Theme Toggle ---
+const THEME_KEY = 'movielib_theme';
+const btnTheme = document.getElementById('btn-theme');
+const iconMoon = btnTheme.querySelector('.icon-moon');
+const iconSun = btnTheme.querySelector('.icon-sun');
+
+function applyTheme(theme) {
+    if (theme === 'light') {
+        document.body.classList.add('light-theme');
+        iconMoon.style.display = 'none';
+        iconSun.style.display = '';
+    } else {
+        document.body.classList.remove('light-theme');
+        iconMoon.style.display = '';
+        iconSun.style.display = 'none';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+// Load saved theme on start
+const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+applyTheme(savedTheme);
+
+btnTheme.addEventListener('click', () => {
+    const current = document.body.classList.contains('light-theme') ? 'light' : 'dark';
+    applyTheme(current === 'light' ? 'dark' : 'light');
+});
+
 // --- Keyboard Shortcuts Overlay ---
 function showShortcutsOverlay() {
     const existing = document.querySelector('.shortcuts-overlay');
@@ -1005,6 +1175,7 @@ function showShortcutsOverlay() {
 // Restore state from URL hash (bookmarkable/shareable links)
 loadFromURL();
 fetchCategories();
+fetchStats();
 fetchMovies(searchInput.value, 0, false);
 
 // Handle browser back/forward buttons
