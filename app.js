@@ -3,8 +3,7 @@
 // --- DOM Elements ---
 const contentArea = document.getElementById('content-area');
 const searchInput = document.getElementById('search-input');
-const btnGrid = document.getElementById('btn-grid');
-const btnList = document.getElementById('btn-list');
+const btnViewToggle = document.getElementById('btn-view-toggle');
 const modal = document.getElementById('movie-modal');
 const closeModal = document.getElementById('close-modal');
 const modalBody = document.getElementById('modal-body');
@@ -344,7 +343,6 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             noResultsDiv.innerHTML = `
                 <div class="no-results-illustration">
                     <svg width="180" height="160" viewBox="0 0 180 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <!-- Film reel -->
                         <rect x="50" y="30" width="80" height="100" rx="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
                         <circle cx="65" cy="45" r="5" fill="rgba(229,9,20,0.4)"/>
                         <circle cx="90" cy="45" r="5" fill="rgba(229,9,20,0.3)"/>
@@ -352,12 +350,9 @@ async function fetchMovies(query = '', offset = 0, append = false) {
                         <circle cx="65" cy="115" r="5" fill="rgba(229,9,20,0.3)"/>
                         <circle cx="90" cy="115" r="5" fill="rgba(229,9,20,0.4)"/>
                         <circle cx="115" cy="115" r="5" fill="rgba(229,9,20,0.3)"/>
-                        <!-- Magnifying glass -->
                         <circle cx="90" cy="75" r="22" stroke="rgba(255,255,255,0.25)" stroke-width="3" fill="none"/>
                         <line x1="106" y1="91" x2="120" y2="105" stroke="rgba(255,255,255,0.25)" stroke-width="3" stroke-linecap="round"/>
-                        <!-- Question mark inside glass -->
                         <text x="82" y="83" font-size="24" font-weight="bold" fill="rgba(229,9,20,0.6)">?</text>
-                        <!-- Stars -->
                         <circle cx="25" cy="50" r="2" fill="rgba(255,255,255,0.2)"/>
                         <circle cx="155" cy="40" r="1.5" fill="rgba(255,255,255,0.15)"/>
                         <circle cx="30" cy="110" r="1" fill="rgba(255,255,255,0.1)"/>
@@ -381,7 +376,6 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             Object.assign(noResultsDiv.style, { gridColumn: '1 / -1' });
             contentArea.appendChild(noResultsDiv);
             
-            // Attach reset button handler
             const resetBtn = noResultsDiv.querySelector('.no-results-reset-btn');
             if (resetBtn) {
                 resetBtn.addEventListener('click', () => {
@@ -413,10 +407,7 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         currentQuery = query;
         currentOffset = result.nextOffset || offset + movies.length;
 
-        // Update breadcrumb
         updateBreadcrumb();
-
-        // Save state to URL
         updateURL();
     } catch (err) {
         console.error('Fetch error:', err);
@@ -440,16 +431,12 @@ function addLoadMoreButton() {
     const btn = createElement('button', 'load-more-btn', 'Load More Movies');
     btn.style.gridColumn = '1 / -1';
     btn.addEventListener('click', () => {
-        // Remember where the button is so we can scroll to new content
         const scrollTarget = btn.offsetTop - 20;
 
         btn.disabled = true;
         btn.textContent = 'Loading...';
         fetchMovies(currentQuery, currentOffset, true).finally(() => {
-            // Remove the old button (a new one will be added by fetchMovies)
             if (btn.parentNode) btn.remove();
-
-            // Smooth scroll to where new content starts
             contentArea.scrollTo({ top: scrollTarget, behavior: 'smooth' });
         });
     });
@@ -472,8 +459,6 @@ function renderGrid(movies, append = false) {
         const card = createElement('div','movie-card');
         card.dataset.num = movie.num;
 
-        /* POSTER WRAPPER */
-
         const posterWrapper = createElement('div','poster-wrapper loading');
 
         const glow = createElement('div','poster-glow');
@@ -487,7 +472,7 @@ function renderGrid(movies, append = false) {
         img.alt = movie.formattedtitle || movie.title || 'Movie Poster';
 
         img.onerror = () => {
-            img.onerror = null; // prevent infinite loop
+            img.onerror = null;
             img.src = 'data:image/svg+xml,' + encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300">
                     <rect width="200" height="300" fill="#1a1a1a"/>
@@ -504,10 +489,8 @@ function renderGrid(movies, append = false) {
         };
 
         img.onload = () => {
-
             posterWrapper.classList.remove('loading');
             posterWrapper.classList.add('loaded');
-
             try{
                 getPosterGlow(img, glow);
             }catch(e){
@@ -515,7 +498,6 @@ function renderGrid(movies, append = false) {
             }
         };
         
-        // Add source badge
         if (movie.source === 'paripakva') {
             const sourceBadge = createElement('div','movie-badge badge-source','18+');
             sourceBadge.style.backgroundColor = 'purple';
@@ -525,17 +507,11 @@ function renderGrid(movies, append = false) {
 
         posterWrapper.appendChild(img);
 
-        /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
-
-        /* BADGES */
-
         const createBadge = (text, cls) => {
             const badge = createElement('div',`movie-badge ${cls}`);
             badge.textContent = text;
             return badge;
         };
-
-        /* CERTIFICATION */
 
         if(movie.certification){
             posterWrapper.appendChild(
@@ -543,24 +519,18 @@ function renderGrid(movies, append = false) {
             );
         }
 
-        /* LENGTH */
-
         if(movie.length){
             posterWrapper.appendChild(
                 createBadge(`⏱ ${movie.length}`,'badge-length')
             );
         }
 
-        /* RATING */
-
         const ratingVal = parseFloat(movie.rating) || 0;
 
         if(ratingVal > 0){
-
             const ratingBadge = createBadge(`⭐ ${ratingVal.toFixed(1)}`,'badge-rating');
 
             if(movie.external_url){
-
                 ratingBadge.style.cursor='pointer';
                 ratingBadge.title='Open external rating';
 
@@ -568,13 +538,10 @@ function renderGrid(movies, append = false) {
                     e.stopPropagation();
                     window.open(movie.external_url,'_blank');
                 });
-
             }
 
             posterWrapper.appendChild(ratingBadge);
         }
-
-        /* YEAR */
 
         if(movie.year){
             posterWrapper.appendChild(
@@ -582,7 +549,6 @@ function renderGrid(movies, append = false) {
             );
         }
 
-        // --- Hover Info (Netflix-style) ---
         const hoverInfo = createElement('div', 'hover-info');
         const descSize = 180;
         hoverInfo.textContent = movie.description 
@@ -590,8 +556,6 @@ function renderGrid(movies, append = false) {
             : 'No description available.';
         posterWrapper.appendChild(hoverInfo);
         
-        /* INFO SECTION */
-
         const info = createElement('div','card-info');
 
         const titleText = `${movie.num} - ${movie.title}`;
@@ -612,7 +576,6 @@ function renderGrid(movies, append = false) {
 
         card.append(posterWrapper,info);
 
-        // Favorite heart button
         const favBtn = createElement('button', 'fav-btn' + (isFavorite(movie.num) ? ' active' : ''), '♥');
         favBtn.title = isFavorite(movie.num) ? 'Remove from favorites' : 'Add to favorites';
         favBtn.addEventListener('click', (e) => {
@@ -620,15 +583,12 @@ function renderGrid(movies, append = false) {
             const nowFav = toggleFavorite(movie.num);
             favBtn.classList.toggle('active', nowFav);
             favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
-            // Refresh stats and favorites chip count
             fetchStats();
-            // Update favorites chip count
             const favChipEl = genreFilters.querySelector('.fav-chip');
             if (favChipEl) {
                 const cnt = getFavorites().length;
                 favChipEl.textContent = `♥ Favorites${cnt > 0 ? ' (' + cnt + ')' : ''}`;
             }
-            // If viewing favorites, refresh the list
             if (currentCategory === '__favorites__') {
                 fetchMovies(searchInput.value, 0, false);
             }
@@ -661,12 +621,10 @@ function getPosterGlow(img, glowEl){
     let r=0,g=0,b=0,count=0;
 
     for(let i=0;i<pixels.length;i+=4){
-
         r+=pixels[i];
         g+=pixels[i+1];
         b+=pixels[i+2];
         count++;
-
     }
 
     r=Math.floor(r/count);
@@ -701,7 +659,6 @@ function renderTable(movies, append = false) {
         const row = createElement('tr');
         row.dataset.num = movie.num;
 
-        // Favorite heart cell
         const tdFav = createElement('td');
         const favBtn = createElement('button', 'fav-btn' + (isFavorite(movie.num) ? ' active' : ''), '♥');
         favBtn.title = isFavorite(movie.num) ? 'Remove from favorites' : 'Add to favorites';
@@ -762,7 +719,6 @@ function renderTable(movies, append = false) {
             if (ratingVal === 0) tdRating.style.opacity = '0.5';
         }
         
-        // Add source badge for paripakva in table view
         if (movie.source === 'paripakva') {
             const sourceBadge = createElement('span', '', '18+');
             Object.assign(sourceBadge.style, {
@@ -781,7 +737,6 @@ function renderTable(movies, append = false) {
         row.dataset.poster = movie.poster;
         row.addEventListener('click', () => openModal(movie));
 
-        // Poster preview on hover
         row.addEventListener('mouseenter', (e) => {
             showTablePosterPreview(movie.poster, e);
         });
@@ -800,23 +755,18 @@ function renderTable(movies, append = false) {
 function openModal(movie) {
     clearContainer(modalBody);
 
-    // Modal header (background poster)
     const header = createElement('div', 'modal-header');
     header.style.backgroundImage = `url(${movie.poster})`;
 
-    // Header top row (ID + title)
     const headerTop = createElement('div', 'modal-header-top');
     const title = createElement('h2');
     title.append(createElement('span', 'modal-num', `#${movie.num}`), document.createTextNode(movie.title));
     headerTop.appendChild(title);
 
-    // Modal content row: flex container
     const contentRow = createElement('div', 'modal-content-row');
 
-    // Poster (sticky on left)
     const posterWrapper = createElement('div', 'modal-poster-wrapper');
 
-    // Make poster clickable to open lightbox
     const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
     posterImg.style.cursor = 'pointer';
 
@@ -840,12 +790,10 @@ function openModal(movie) {
         const lightboxImg = lightbox.querySelector('.lightbox-img');
         lightboxImg.src = movie.poster;
         
-        // Reset zoom state
         lightboxImg.classList.remove('zoomed');
         lightboxImg.style.transform = '';
         lightboxImg.style.cursor = 'zoom-in';
 
-        // Show with animation
         lightbox.classList.add('show');
     });
 
@@ -858,10 +806,8 @@ function openModal(movie) {
 
     contentRow.appendChild(posterWrapper);
 
-    // Details column (scrollable)
     const details = createElement('div', 'modal-details');
 
-    // Meta info
     const meta = createElement('div', 'modal-meta');
     if (movie.year) meta.appendChild(createElement('span', '', movie.year));
     if (movie.genre) meta.appendChild(createElement('span', '', movie.genre));
@@ -886,7 +832,6 @@ function openModal(movie) {
     if (rating.href) rating.style.cursor = 'pointer';
     meta.appendChild(rating);
 
-    // Synopsis / director / cast
     details.append(
         meta,
         createElement('span', 'modal-label', 'SYNOPSIS'),
@@ -897,7 +842,6 @@ function openModal(movie) {
         createElement('p', 'modal-cast', movie.actors || 'Unknown')
     );
 
-    // Tech details
     const techSection = createElement('div', 'tech-details');
     const inlineRow = createElement('div', 'tech-row-inline');
 
@@ -911,7 +855,6 @@ function openModal(movie) {
     inlineRow.append(sizeItem, resolutionItem, audioItem);
     techSection.appendChild(inlineRow);
 
-    // File row
     if (movie.filepath) {
         const fullPath = movie.filepath.replace(/\\/g, '/');
         const lastSlash = fullPath.lastIndexOf('/');
@@ -984,7 +927,6 @@ function updateZoom() {
     }
 }
 
-// Click to toggle zoom
 lightboxImg.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!isZoomed) {
@@ -1001,7 +943,6 @@ lightboxImg.addEventListener('click', (e) => {
     }
 });
 
-// Mouse wheel zoom
 lightboxImg.addEventListener('wheel', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1018,7 +959,6 @@ lightboxImg.addEventListener('wheel', (e) => {
     updateZoom();
 });
 
-// Drag to pan when zoomed
 lightboxImg.addEventListener('mousedown', (e) => {
     if (!isZoomed) return;
     e.preventDefault();
@@ -1044,7 +984,6 @@ document.addEventListener('mouseup', () => {
     }
 });
 
-// Zoom control buttons
 const zoomInBtn = lightbox.querySelector('.zoom-in-btn');
 const zoomOutBtn = lightbox.querySelector('.zoom-out-btn');
 const zoomResetBtn = lightbox.querySelector('.zoom-reset-btn');
@@ -1104,23 +1043,32 @@ sortSelect.addEventListener('change', () => {
     fetchMovies(searchInput.value, 0, false);
 });
 
-btnGrid.addEventListener('click', () => {
-    if (currentView !== 'grid') {
-        currentView = 'grid';
-        btnGrid.classList.add('active');
-        btnList.classList.remove('active');
-        fetchMovies(searchInput.value, 0, false);
+// --- View Toggle ---
+function updateViewToggleButton() {
+    const iconGrid = btnViewToggle.querySelector('.icon-grid');
+    const iconList = btnViewToggle.querySelector('.icon-list');
+    const label = btnViewToggle.querySelector('.view-toggle-label');
+
+    if (currentView === 'grid') {
+        iconGrid.style.display = '';
+        iconList.style.display = 'none';
+        label.textContent = 'Grid';
+    } else {
+        iconGrid.style.display = 'none';
+        iconList.style.display = '';
+        label.textContent = 'List';
     }
+}
+
+btnViewToggle.addEventListener('click', () => {
+    currentView = currentView === 'grid' ? 'list' : 'grid';
+    updateViewToggleButton();
+    fetchMovies(searchInput.value, 0, false);
 });
 
-btnList.addEventListener('click', () => {
-    if (currentView !== 'list') {
-        currentView = 'list';
-        btnList.classList.add('active');
-        btnGrid.classList.remove('active');
-        fetchMovies(searchInput.value, 0, false);
-    }
-});
+// Initialize button state (grid is default)
+updateViewToggleButton();
+
 function smoothClose() {
     modal.classList.add('closing');
     setTimeout(() => {
@@ -1132,8 +1080,6 @@ function smoothClose() {
 closeModal.addEventListener('click', smoothClose);
 modal.addEventListener('click', e => { if (e.target === modal) smoothClose(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open) smoothClose(); });
-
-// Lightbox functionality is handled inline in openModal()
 
 // --- Back to Top Button ---
 const backToTopBtn = createElement('button', 'back-to-top-btn');
@@ -1148,7 +1094,6 @@ backToTopBtn.addEventListener('click', () => {
 });
 document.body.appendChild(backToTopBtn);
 
-// Show/hide based on scroll position
 contentArea.addEventListener('scroll', () => {
     if (contentArea.scrollTop > 400) {
         backToTopBtn.classList.add('visible');
@@ -1156,7 +1101,6 @@ contentArea.addEventListener('scroll', () => {
         backToTopBtn.classList.remove('visible');
     }
 
-    // Infinite scroll: auto-load when near bottom
     const scrollThreshold = 300;
     const distanceFromBottom = contentArea.scrollHeight - contentArea.scrollTop - contentArea.clientHeight;
     if (distanceFromBottom < scrollThreshold && hasMoreResults && !isLoading) {
@@ -1177,7 +1121,6 @@ function createCertificationBadge(certText) {
 }
 
 document.addEventListener('keydown', (e) => {
-    // Ctrl+Shift+K: Toggle paripakva archive
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
         showParipakva = !showParipakva;
         currentCategory = '';
@@ -1186,32 +1129,35 @@ document.addEventListener('keydown', (e) => {
         console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
     }
 
-    // ?: Show keyboard shortcuts overlay
     if (e.key === '?' && !modal.open && document.activeElement !== searchInput) {
         showShortcutsOverlay();
     }
 
-    // / or Ctrl+K: Focus search input
     if ((e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) && document.activeElement !== searchInput) {
         e.preventDefault();
         searchInput.focus();
     }
 
-    // Escape: Clear search if search is focused and has text
     if (e.key === 'Escape' && document.activeElement === searchInput && searchInput.value) {
         searchInput.value = '';
         fetchMovies('', 0, false);
         searchInput.blur();
     }
 
-    // 1: Switch to grid view
     if (e.key === '1' && document.activeElement !== searchInput) {
-        btnGrid.click();
+        if (currentView !== 'grid') {
+            currentView = 'grid';
+            updateViewToggleButton();
+            fetchMovies(searchInput.value, 0, false);
+        }
     }
 
-    // 2: Switch to list view
     if (e.key === '2' && document.activeElement !== searchInput) {
-        btnList.click();
+        if (currentView !== 'list') {
+            currentView = 'list';
+            updateViewToggleButton();
+            fetchMovies(searchInput.value, 0, false);
+        }
     }
 });
 
@@ -1237,7 +1183,6 @@ function moveTablePosterPreview(e) {
     const previewHeight = 300;
     let x = e.clientX + 20;
     let y = e.clientY - previewHeight / 2;
-    // Keep within viewport
     if (x + previewWidth > window.innerWidth) x = e.clientX - previewWidth - 20;
     if (y < 10) y = 10;
     if (y + previewHeight > window.innerHeight) y = window.innerHeight - previewHeight - 10;
@@ -1271,7 +1216,6 @@ function applyTheme(theme) {
     localStorage.setItem(THEME_KEY, theme);
 }
 
-// Load saved theme on start
 const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
 applyTheme(savedTheme);
 
@@ -1312,15 +1256,51 @@ function showShortcutsOverlay() {
     document.body.appendChild(overlay);
 }
 
+// --- Collapsible Bars ---
+const COLLAPSE_KEY = 'movielib_collapsed';
+
+function getCollapseState() {
+    try {
+        return JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveCollapseState(state) {
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state));
+}
+
+function initCollapsibleBars() {
+    const state = getCollapseState();
+    const bars = document.querySelectorAll('.collapsible-bar');
+
+    bars.forEach(bar => {
+        const id = bar.id;
+        const btn = bar.querySelector('.collapse-toggle');
+
+        if (state[id] === true) {
+            bar.classList.add('collapsed');
+        }
+
+        btn.addEventListener('click', () => {
+            bar.classList.toggle('collapsed');
+            const currentState = getCollapseState();
+            currentState[id] = bar.classList.contains('collapsed');
+            saveCollapseState(currentState);
+        });
+    });
+}
+
+initCollapsibleBars();
+
 
 // --- Initial Load ---
-// Restore state from URL hash (bookmarkable/shareable links)
 loadFromURL();
 fetchCategories();
 fetchStats();
 fetchMovies(searchInput.value, 0, false);
 
-// Handle browser back/forward buttons
 window.addEventListener('hashchange', () => {
     loadFromURL();
     fetchMovies(searchInput.value, 0, false);
