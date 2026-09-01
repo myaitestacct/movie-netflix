@@ -1224,7 +1224,7 @@ font-size:.75rem;
    GENRE FILTER CHIPS
 ========================= */
 #search-results-count {
-    margin-top: 30px;
+    margin-top: 80px;
     padding: 0.5rem 1rem;
     color: var(--text-muted);
     font-size: 0.85rem;
