@@ -866,6 +866,7 @@ function createCertificationBadge(certText) {
 }
 
 document.addEventListener('keydown', (e) => {
+    // Ctrl+Shift+K: Toggle paripakva archive
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
         showParipakva = !showParipakva;
         currentCategory = '';
@@ -873,7 +874,67 @@ document.addEventListener('keydown', (e) => {
         fetchMovies(searchInput.value, 0, false);
         console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
     }
+
+    // ?: Show keyboard shortcuts overlay
+    if (e.key === '?' && !modal.open && document.activeElement !== searchInput) {
+        showShortcutsOverlay();
+    }
+
+    // / or Ctrl+K: Focus search input
+    if ((e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+    }
+
+    // Escape: Clear search if search is focused and has text
+    if (e.key === 'Escape' && document.activeElement === searchInput && searchInput.value) {
+        searchInput.value = '';
+        fetchMovies('', 0, false);
+        searchInput.blur();
+    }
+
+    // 1: Switch to grid view
+    if (e.key === '1' && document.activeElement !== searchInput) {
+        btnGrid.click();
+    }
+
+    // 2: Switch to list view
+    if (e.key === '2' && document.activeElement !== searchInput) {
+        btnList.click();
+    }
 });
+
+// --- Keyboard Shortcuts Overlay ---
+function showShortcutsOverlay() {
+    const existing = document.querySelector('.shortcuts-overlay');
+    if (existing) existing.remove();
+
+    const overlay = createElement('div', 'shortcuts-overlay');
+    overlay.innerHTML = `
+        <div class="shortcuts-panel">
+            <div class="shortcuts-header">
+                <h3>Keyboard Shortcuts</h3>
+                <button class="shortcuts-close">&times;</button>
+            </div>
+            <div class="shortcuts-body">
+                <div class="shortcut-row"><kbd>/</kbd> or <kbd>Ctrl+K</kbd> <span>Focus search</span></div>
+                <div class="shortcut-row"><kbd>Esc</kbd> <span>Clear search / Close modal</span></div>
+                <div class="shortcut-row"><kbd>1</kbd> <span>Grid view</span></div>
+                <div class="shortcut-row"><kbd>2</kbd> <span>List view</span></div>
+                <div class="shortcut-row"><kbd>Ctrl+Shift+K</kbd> <span>Toggle archive mode</span></div>
+                <div class="shortcut-row"><kbd>?</kbd> <span>Show this help</span></div>
+            </div>
+        </div>
+    `;
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.classList.contains('shortcuts-close')) {
+            overlay.remove();
+        }
+    });
+
+    document.body.appendChild(overlay);
+}
 
 
 // --- Initial Load ---

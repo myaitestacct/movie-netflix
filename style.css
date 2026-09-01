@@ -1567,3 +1567,92 @@ td .fav-btn {
         font-size: 0.7rem;
     }
 }
+
+/* =========================
+   KEYBOARD SHORTCUTS OVERLAY
+========================= */
+.shortcuts-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 6000;
+    animation: fadeIn 0.2s ease;
+}
+
+.shortcuts-panel {
+    background: #1a1a1a;
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    animation: modalZoom 0.25s ease forwards;
+}
+
+.shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.shortcuts-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.shortcuts-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.shortcuts-close:hover {
+    color: var(--accent);
+}
+
+.shortcuts-body {
+    padding: 1rem 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.shortcut-row span {
+    flex: 1;
+}
+
+.shortcut-row kbd {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: var(--text-main);
+    min-width: 24px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
