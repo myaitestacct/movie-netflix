@@ -28,28 +28,23 @@
                     <option value="rating_asc">Rating (Lowest)</option>
                 </select>
             </div>
-            <div class="segmented-control">
-                <button id="btn-grid" class="seg-btn active" title="Card View">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
-                    </svg>
-                    <span>Grid</span>
-                </button>
-                <button id="btn-list" class="seg-btn" title="List View">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                    <span>List</span>
-                </button>
-            </div>
+            <button id="btn-view-toggle" class="view-toggle" title="Toggle Grid/List view (Grid default)">
+                <svg class="icon-grid" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <svg class="icon-list" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+                <span class="view-toggle-label">Grid</span>
+            </button>
             <button id="btn-theme" class="theme-toggle" title="Toggle light/dark theme">
                 <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
@@ -75,13 +70,27 @@
     <div id="breadcrumb" class="breadcrumb"></div>
 
     <!-- Genre Filter Chips -->
-    <div id="genre-filters" class="genre-filters">
-        <!-- Chips injected via JS -->
+    <div class="collapsible-bar" id="genre-bar">
+        <button class="collapse-toggle" id="genre-collapse-btn" title="Toggle genres">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </button>
+        <div id="genre-filters" class="genre-filters">
+            <!-- Chips injected via JS -->
+        </div>
     </div>
 
     <!-- Stats Dashboard -->
-    <div id="stats-bar" class="stats-bar">
-        <!-- Stats injected via JS -->
+    <div class="collapsible-bar" id="stats-wrapper">
+        <button class="collapse-toggle" id="stats-collapse-btn" title="Toggle stats">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </button>
+        <div id="stats-bar" class="stats-bar">
+            <!-- Stats injected via JS -->
+        </div>
     </div>
 
     <!-- Main Content Area -->
