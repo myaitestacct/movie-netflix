@@ -1656,3 +1656,101 @@ td .fav-btn {
     text-align: center;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
+/* =========================
+   NO RESULTS - ILLUSTRATED STATE
+========================= */
+.no-results {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+    min-height: 400px;
+}
+
+.no-results-illustration {
+    margin-bottom: 2rem;
+    opacity: 0.6;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.no-results-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 0.8rem;
+}
+
+.no-results-message {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    max-width: 500px;
+}
+
+.no-results-tips {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 2rem;
+    text-align: left;
+    max-width: 400px;
+}
+
+.no-results-tips .tip-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.no-results-tips ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.no-results-tips li {
+    padding: 0.3rem 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.no-results-tips li:before {
+    content: "•";
+    color: var(--accent);
+    font-weight: bold;
+    display: inline-block;
+    width: 1em;
+    margin-left: -1em;
+}
+
+.no-results-reset-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 0.7rem 2rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(229, 9, 20, 0.3);
+}
+
+.no-results-reset-btn:hover {
+    background: #ff1f2b;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(229, 9, 20, 0.5);
+}

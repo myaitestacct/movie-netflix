@@ -260,9 +260,64 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         if (loadingEl) loadingEl.remove();
 
         if (!append && movies.length === 0) {
-            const msg = createElement('div', 'no-results', query ? 'No matches found in library.' : 'Start typing to search...');
-            Object.assign(msg.style, { gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' });
-            contentArea.appendChild(msg);
+            const noResultsDiv = createElement('div', 'no-results');
+            const noResultsMessage = query ? `No movies found for "${query}". Try a different search or genre.` : 'No movies available. Start typing to search...';
+            
+            noResultsDiv.innerHTML = `
+                <div class="no-results-illustration">
+                    <svg width="180" height="160" viewBox="0 0 180 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Film reel -->
+                        <rect x="50" y="30" width="80" height="100" rx="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+                        <circle cx="65" cy="45" r="5" fill="rgba(229,9,20,0.4)"/>
+                        <circle cx="90" cy="45" r="5" fill="rgba(229,9,20,0.3)"/>
+                        <circle cx="115" cy="45" r="5" fill="rgba(229,9,20,0.4)"/>
+                        <circle cx="65" cy="115" r="5" fill="rgba(229,9,20,0.3)"/>
+                        <circle cx="90" cy="115" r="5" fill="rgba(229,9,20,0.4)"/>
+                        <circle cx="115" cy="115" r="5" fill="rgba(229,9,20,0.3)"/>
+                        <!-- Magnifying glass -->
+                        <circle cx="90" cy="75" r="22" stroke="rgba(255,255,255,0.25)" stroke-width="3" fill="none"/>
+                        <line x1="106" y1="91" x2="120" y2="105" stroke="rgba(255,255,255,0.25)" stroke-width="3" stroke-linecap="round"/>
+                        <!-- Question mark inside glass -->
+                        <text x="82" y="83" font-size="24" font-weight="bold" fill="rgba(229,9,20,0.6)">?</text>
+                        <!-- Stars -->
+                        <circle cx="25" cy="50" r="2" fill="rgba(255,255,255,0.2)"/>
+                        <circle cx="155" cy="40" r="1.5" fill="rgba(255,255,255,0.15)"/>
+                        <circle cx="30" cy="110" r="1" fill="rgba(255,255,255,0.1)"/>
+                        <circle cx="150" cy="120" r="2" fill="rgba(255,255,255,0.15)"/>
+                    </svg>
+                </div>
+                <h2 class="no-results-title">No results found</h2>
+                <p class="no-results-message">${noResultsMessage}</p>
+                <div class="no-results-tips">
+                    <span class="tip-label">Tips:</span>
+                    <ul>
+                        <li>Check for typos in your search</li>
+                        <li>Try broader keywords</li>
+                        <li>Try a different genre filter</li>
+                        <li>Check a different sort order</li>
+                    </ul>
+                </div>
+                <button class="no-results-reset-btn">Clear Search &amp; Filters</button>
+            `;
+            
+            Object.assign(noResultsDiv.style, { gridColumn: '1 / -1' });
+            contentArea.appendChild(noResultsDiv);
+            
+            // Attach reset button handler
+            const resetBtn = noResultsDiv.querySelector('.no-results-reset-btn');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    currentQuery = '';
+                    currentCategory = '';
+                    searchInput.value = '';
+                    renderGenreChips();
+                    sortSelect.value = 'num_asc';
+                    currentSort = 'num_asc';
+                    currentOffset = 0;
+                    fetchMovies('', 0, false);
+                });
+            }
+            
             isLoading = false;
             return;
         }
