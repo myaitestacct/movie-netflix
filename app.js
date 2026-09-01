@@ -856,6 +856,18 @@ contentArea.addEventListener('scroll', () => {
     } else {
         backToTopBtn.classList.remove('visible');
     }
+
+    // Infinite scroll: auto-load when near bottom
+    const scrollThreshold = 300;
+    const distanceFromBottom = contentArea.scrollHeight - contentArea.scrollTop - contentArea.clientHeight;
+    if (distanceFromBottom < scrollThreshold && hasMoreResults && !isLoading) {
+        const loadBtn = contentArea.querySelector('.load-more-btn');
+        if (loadBtn && !loadBtn.disabled) {
+            loadBtn.disabled = true;
+            loadBtn.textContent = 'Loading...';
+            fetchMovies(currentQuery, currentOffset, true);
+        }
+    }
 });
 
 // --- Certification Badge ---
