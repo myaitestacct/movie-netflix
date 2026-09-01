@@ -8,9 +8,10 @@ const btnList = document.getElementById('btn-list');
 const modal = document.getElementById('movie-modal');
 const closeModal = document.getElementById('close-modal');
 const modalBody = document.getElementById('modal-body');
+const sortSelect = document.getElementById('sort-select');
+const genreFilters = document.getElementById('genre-filters');
 
-// for paripakva
-const toggleParipakva = document.getElementById('toggle-paripakva');
+// Paripakva archive mode is toggled via Ctrl+Shift+K keyboard shortcut
 
 // --- State ---
 let currentView = 'grid';
@@ -20,6 +21,36 @@ let currentOffset = 0;
 let hasMoreResults = true;
 let isLoading = false;
 const currentLimit = 50;
+let showParipakva = false; // archive/18+ content toggle (Ctrl+Shift+K)
+let currentSort = 'num_asc'; // current sort order
+let currentCategory = ''; // current genre filter ('' = all)
+const FAVORITES_KEY = 'movielib_favorites';
+
+// --- Helper: Get favorites from localStorage ---
+function getFavorites() {
+    try {
+        return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+// --- Helper: Toggle a movie in favorites ---
+function toggleFavorite(num) {
+    let favs = getFavorites();
+    if (favs.includes(num)) {
+        favs = favs.filter(n => n !== num);
+    } else {
+        favs.push(num);
+    }
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+    return favs.includes(num);
+}
+
+// --- Helper: Check if a movie is a favorite ---
+function isFavorite(num) {
+    return getFavorites().includes(num);
+}
 
 // --- Helper: Create DOM Element ---
 function createElement(tag, className = '', textContent = '', attributes = {}) {
@@ -35,6 +66,138 @@ function clearContainer(container) {
     while (container.firstChild) container.removeChild(container.firstChild);
 }
 
+// --- Helper: Escape HTML to prevent XSS ---
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// --- Helper: Show loading spinner ---
+function showLoadingSpinner() {
+    const existing = contentArea.querySelector('.loading-spinner');
+    if (existing) existing.remove();
+    const spinner = createElement('div', 'loading-spinner');
+    spinner.innerHTML = `
+        <div class="spinner"></div>
+        <div class="spinner-text">Loading movies...</div>
+    `;
+    contentArea.appendChild(spinner);
+}
+
+// --- Helper: Hide loading spinner ---
+function hideLoadingSpinner() {
+    const spinner = contentArea.querySelector('.loading-spinner');
+    if (spinner) spinner.remove();
+}
+
+// --- URL State: Save current state to URL hash ---
+function updateURL() {
+    const params = new URLSearchParams();
+    if (searchInput.value) params.set('q', searchInput.value);
+    if (currentSort !== 'num_asc') params.set('sort', currentSort);
+    if (currentCategory === '__favorites__') params.set('favs', '1');
+    else if (currentCategory) params.set('genre', currentCategory);
+    if (showParipakva) params.set('archive', '1');
+
+    const hash = params.toString();
+    const newURL = hash ? `${window.location.pathname}#${hash}` : window.location.pathname;
+    history.replaceState(null, '', newURL);
+}
+
+// --- URL State: Restore state from URL hash ---
+function loadFromURL() {
+    const hash = window.location.hash.slice(1); // remove #
+    if (!hash) return false;
+
+    const params = new URLSearchParams(hash);
+    const q = params.get('q') || '';
+    const sort = params.get('sort') || 'num_asc';
+    const genre = params.get('genre') || '';
+    const archive = params.get('archive') || '0';
+    const favs = params.get('favs') || '0';
+
+    searchInput.value = q;
+    currentSort = sort;
+    currentCategory = favs === '1' ? '__favorites__' : genre;
+    showParipakva = archive === '1';
+
+    // Sync sort dropdown
+    sortSelect.value = currentSort;
+
+    return true;
+}
+
+// --- Fetch and render genre filter chips ---
+async function fetchCategories() {
+    try {
+        const includeArchive = showParipakva ? 1 : 0;
+        const response = await fetch(`api.php?action=categories&archive=${includeArchive}`);
+        if (!response.ok) return;
+        const result = await response.json();
+        const categories = result.categories || [];
+        renderGenreChips(categories);
+    } catch (err) {
+        console.warn('Failed to load categories:', err);
+    }
+}
+
+// --- Render genre chips ---
+function renderGenreChips(categories) {
+    clearContainer(genreFilters);
+
+    // "All" chip
+    const allChip = createElement('button', 'genre-chip' + (currentCategory === '' ? ' active' : ''), 'All');
+    allChip.addEventListener('click', () => {
+        currentCategory = '';
+        updateActiveChip();
+        fetchMovies(searchInput.value, 0, false);
+    });
+    genreFilters.appendChild(allChip);
+
+    // "♥ Favorites" chip
+    const favCount = getFavorites().length;
+    const favChip = createElement('button', 'genre-chip fav-chip' + (currentCategory === '__favorites__' ? ' active' : ''), `♥ Favorites${favCount > 0 ? ' (' + favCount + ')' : ''}`);
+    favChip.addEventListener('click', () => {
+        if (currentCategory === '__favorites__') {
+            currentCategory = '';
+        } else {
+            currentCategory = '__favorites__';
+        }
+        updateActiveChip();
+        fetchMovies(searchInput.value, 0, false);
+    });
+    genreFilters.appendChild(favChip);
+
+    categories.forEach(cat => {
+        const chip = createElement('button', 'genre-chip' + (currentCategory === cat ? ' active' : ''), cat);
+        chip.addEventListener('click', () => {
+            if (currentCategory === cat) {
+                currentCategory = '';
+            } else {
+                currentCategory = cat;
+            }
+            updateActiveChip();
+            fetchMovies(searchInput.value, 0, false);
+        });
+        genreFilters.appendChild(chip);
+    });
+}
+
+// --- Update active chip styling ---
+function updateActiveChip() {
+    genreFilters.querySelectorAll('.genre-chip').forEach(chip => {
+        const isAll = chip.textContent === 'All';
+        const isFav = chip.classList.contains('fav-chip');
+        let isActive = false;
+        if (currentCategory === '' && isAll) isActive = true;
+        else if (currentCategory === '__favorites__' && isFav) isActive = true;
+        else if (chip.textContent === currentCategory) isActive = true;
+        chip.classList.toggle('active', isActive);
+    });
+}
+
 // --- Fetch Movies from API ---
 async function fetchMovies(query = '', offset = 0, append = false) {
     if (isLoading) return;
@@ -45,14 +208,22 @@ async function fetchMovies(query = '', offset = 0, append = false) {
             clearContainer(contentArea);
             currentOffset = 0;
             hasMoreResults = true;
+            showLoadingSpinner();
         }
 
-        //const response = await fetch(
-        //  `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}`);
         const includeArchive = showParipakva ? 1 : 0;
 
+        // Build category parameter
+        let categoryParam = currentCategory;
+        let favsParam = '';
+        if (currentCategory === '__favorites__') {
+            categoryParam = '';
+            const favIds = getFavorites();
+            favsParam = favIds.join(',');
+        }
+
         const response = await fetch(
-            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}`
+            `api.php?q=${encodeURIComponent(query)}&limit=${currentLimit}&offset=${offset}&archive=${includeArchive}&sort=${encodeURIComponent(currentSort)}&category=${encodeURIComponent(categoryParam)}&favs=${encodeURIComponent(favsParam)}`
         );
         
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
@@ -60,13 +231,28 @@ async function fetchMovies(query = '', offset = 0, append = false) {
         const movies = result.movies || [];
         hasMoreResults = result.hasMore === true;
 
+        hideLoadingSpinner();
+
         // Display total results
         const totalEl = document.getElementById('search-results-count');
-        if (query) {
+        if (query && currentCategory === '__favorites__') {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} favorite(s) matching "${query}"`;
+        } else if (query && currentCategory) {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}" in ${currentCategory}`;
+        } else if (query) {
             const shownCount = append ? currentOffset + movies.length : movies.length;
             totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} result(s) for "${query}"`;
+        } else if (currentCategory === '__favorites__') {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} favorite(s)`;
+        } else if (currentCategory) {
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} in ${currentCategory}`;
         } else {
-            totalEl.textContent = '';
+            const shownCount = append ? currentOffset + movies.length : movies.length;
+            totalEl.textContent = `Showing ${shownCount} of ${result.totalMatches || 0} movies`;
         }
 
         // Remove loading indicator
@@ -92,8 +278,12 @@ async function fetchMovies(query = '', offset = 0, append = false) {
 
         currentQuery = query;
         currentOffset = result.nextOffset || offset + movies.length;
+
+        // Save state to URL
+        updateURL();
     } catch (err) {
         console.error('Fetch error:', err);
+        hideLoadingSpinner();
         if (!append) {
             clearContainer(contentArea);
             const errEl = createElement('div', 'error', 'Error: ' + err.message);
@@ -113,11 +303,17 @@ function addLoadMoreButton() {
     const btn = createElement('button', 'load-more-btn', 'Load More Movies');
     btn.style.gridColumn = '1 / -1';
     btn.addEventListener('click', () => {
+        // Remember where the button is so we can scroll to new content
+        const scrollTarget = btn.offsetTop - 20;
+
         btn.disabled = true;
         btn.textContent = 'Loading...';
         fetchMovies(currentQuery, currentOffset, true).finally(() => {
-            btn.disabled = false;
-            btn.textContent = 'Load More Movies';
+            // Remove the old button (a new one will be added by fetchMovies)
+            if (btn.parentNode) btn.remove();
+
+            // Smooth scroll to where new content starts
+            contentArea.scrollTo({ top: scrollTarget, behavior: 'smooth' });
         });
     });
     contentArea.appendChild(btn);
@@ -153,6 +349,23 @@ function renderGrid(movies, append = false) {
         img.decoding = 'async';
         img.alt = movie.formattedtitle || movie.title || 'Movie Poster';
 
+        img.onerror = () => {
+            img.onerror = null; // prevent infinite loop
+            img.src = 'data:image/svg+xml,' + encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300">
+                    <rect width="200" height="300" fill="#1a1a1a"/>
+                    <g transform="translate(100,130)" fill="none" stroke="#444" stroke-width="2">
+                        <rect x="-25" y="-35" width="50" height="70" rx="4"/>
+                        <circle cx="0" cy="-10" r="12"/>
+                        <path d="M-18 25 L-8 10 L0 18 L8 5 L18 25"/>
+                    </g>
+                    <text x="100" y="200" text-anchor="middle" fill="#555" font-family="sans-serif" font-size="12">No Poster</text>
+                </svg>
+            `);
+            posterWrapper.classList.remove('loading');
+            posterWrapper.classList.add('loaded');
+        };
+
         img.onload = () => {
 
             posterWrapper.classList.remove('loading');
@@ -175,32 +388,13 @@ function renderGrid(movies, append = false) {
 
         posterWrapper.appendChild(img);
 
-        /* HOVER PREVIEW OVERLAY */
-
-/*        const preview = createElement('div','hover-preview');
-
-        const ratingValPreview = parseFloat(movie.rating) || 0;
-        const ratingText = ratingValPreview > 0 ? `⭐ ${ratingValPreview.toFixed(1)}` : '';
-
-        const yearText = movie.year ? `📅 ${movie.year}` : '';
-
-        const topRow = createElement('div','preview-top');
-        topRow.textContent = [ratingText, yearText].filter(Boolean).join('   ');
-
-        const genreRow = createElement('div','preview-genre', movie.genre || '');
-
-        const descText = (movie.description || '').substring(0,120);
-        const descRow = createElement('div','preview-desc', descText ? descText + '…' : '');
-
-        preview.append(topRow, genreRow, descRow);
-
-        posterWrapper.appendChild(preview);*/
+        /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
 
         /* BADGES */
 
         const createBadge = (text, cls) => {
             const badge = createElement('div',`movie-badge ${cls}`);
-            badge.innerHTML = text;
+            badge.textContent = text;
             return badge;
         };
 
@@ -281,6 +475,21 @@ function renderGrid(movies, append = false) {
 
         card.append(posterWrapper,info);
 
+        // Favorite heart button
+        const favBtn = createElement('button', 'fav-btn' + (isFavorite(movie.num) ? ' active' : ''), '♥');
+        favBtn.title = isFavorite(movie.num) ? 'Remove from favorites' : 'Add to favorites';
+        favBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowFav = toggleFavorite(movie.num);
+            favBtn.classList.toggle('active', nowFav);
+            favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+            // If viewing favorites, refresh the list
+            if (currentCategory === '__favorites__') {
+                fetchMovies(searchInput.value, 0, false);
+            }
+        });
+        card.appendChild(favBtn);
+
         card.addEventListener('click',()=>openModal(movie));
 
         grid.appendChild(card);
@@ -327,7 +536,6 @@ function getPosterGlow(img, glowEl){
 function renderTable(movies, append = false) {
     let table = contentArea.querySelector('.movie-table');
     let tbody = table ? table.querySelector('tbody') : null;
-    const posterWrapper = createElement('div','poster-wrapper loading');
 
     if (!table || !append) {
         table = createElement('table', 'movie-table');
@@ -335,7 +543,7 @@ function renderTable(movies, append = false) {
         tbody = createElement('tbody');
 
         const headerRow = createElement('tr');
-        ['#', 'Cover', 'Title', 'Certification', 'Year', 'Category', 'Rating'].forEach(h => {
+        ['', '#', 'Cover', 'Title', 'Certification', 'Year', 'Category', 'Rating'].forEach(h => {
             headerRow.appendChild(createElement('th', '', h));
         });
         thead.appendChild(headerRow);
@@ -348,11 +556,35 @@ function renderTable(movies, append = false) {
         const row = createElement('tr');
         row.dataset.num = movie.num;
 
+        // Favorite heart cell
+        const tdFav = createElement('td');
+        const favBtn = createElement('button', 'fav-btn' + (isFavorite(movie.num) ? ' active' : ''), '♥');
+        favBtn.title = isFavorite(movie.num) ? 'Remove from favorites' : 'Add to favorites';
+        favBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowFav = toggleFavorite(movie.num);
+            favBtn.classList.toggle('active', nowFav);
+            favBtn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+            if (currentCategory === '__favorites__') {
+                fetchMovies(searchInput.value, 0, false);
+            }
+        });
+        tdFav.appendChild(favBtn);
+
         const tdNum = createElement('td', 'num-cell', `#${movie.num}`);
         Object.assign(tdNum.style, { fontWeight: '600', color: 'var(--accent)', minWidth: '50px' });
 
         const tdImg = createElement('td');
         const img = createElement('img', 'table-poster', '', { src: movie.poster, loading: 'lazy' });
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = 'data:image/svg+xml,' + encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="60" viewBox="0 0 40 60">
+                    <rect width="40" height="60" fill="#1a1a1a"/>
+                    <text x="20" y="35" text-anchor="middle" fill="#555" font-family="sans-serif" font-size="8">N/A</text>
+                </svg>
+            `);
+        };
         tdImg.appendChild(img);
 
         const tdTitle = createElement('td', '', movie.title);
@@ -379,15 +611,22 @@ function renderTable(movies, append = false) {
             if (ratingVal === 0) tdRating.style.opacity = '0.5';
         }
         
-        // Add source badge
+        // Add source badge for paripakva in table view
         if (movie.source === 'paripakva') {
-            const sourceBadge = createElement('div','movie-badge badge-source','Paripakva');
-            sourceBadge.style.backgroundColor = 'purple';
-            sourceBadge.style.color = '#fff';
-            posterWrapper.appendChild(sourceBadge);
+            const sourceBadge = createElement('span', '', '18+');
+            Object.assign(sourceBadge.style, {
+                backgroundColor: 'purple',
+                color: '#fff',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '0.7rem',
+                fontWeight: '600',
+                marginLeft: '6px'
+            });
+            tdTitle.appendChild(sourceBadge);
         }
 
-        row.append(tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
+        row.append(tdFav, tdNum, tdImg, tdTitle, tdCert, tdYear, tdGenre, tdRating);
         row.addEventListener('click', () => openModal(movie));
         tbody.appendChild(row);
     });
@@ -416,6 +655,21 @@ const posterWrapper = createElement('div', 'modal-poster-wrapper');
 // Make poster clickable to open lightbox
 const posterImg = createElement('img', 'modal-img', '', { src: movie.poster, alt: movie.title });
 posterImg.style.cursor = 'pointer';
+
+posterImg.onerror = () => {
+    posterImg.onerror = null;
+    posterImg.src = 'data:image/svg+xml,' + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="350" height="500" viewBox="0 0 350 500">
+            <rect width="350" height="500" fill="#1a1a1a"/>
+            <g transform="translate(175,220)" fill="none" stroke="#444" stroke-width="2">
+                <rect x="-35" y="-50" width="70" height="100" rx="6"/>
+                <circle cx="0" cy="-18" r="18"/>
+                <path d="M-28 38 L-14 15 L0 28 L14 8 L28 38"/>
+            </g>
+            <text x="175" y="340" text-anchor="middle" fill="#555" font-family="sans-serif" font-size="16">No Poster Available</text>
+        </svg>
+    `);
+};
 
 posterImg.addEventListener('click', () => {
     const lightbox = document.getElementById('poster-lightbox');
@@ -449,7 +703,7 @@ if (movie.certification) {
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
-            ${movie.length}
+            ${escapeHtml(movie.length)}
         `;
         meta.appendChild(lengthSpan);
     }
@@ -479,11 +733,11 @@ if (movie.certification) {
     const inlineRow = createElement('div', 'tech-row-inline');
 
     const resolutionItem = createElement('div', 'tech-item');
-    resolutionItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="20" x2="16" y2="20"></line></svg><span class="tech-value">${movie.resolution || 'N/A'}</span>`;
+    resolutionItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="20" x2="16" y2="20"></line></svg><span class="tech-value">${escapeHtml(movie.resolution) || 'N/A'}</span>`;
     const audioItem = createElement('div', 'tech-item');
-    audioItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a4 4 0 010 6"></path></svg><span class="tech-value">${movie.audio || 'N/A'}</span>`;
+    audioItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15 9a4 4 0 010 6"></path></svg><span class="tech-value">${escapeHtml(movie.audio) || 'N/A'}</span>`;
     const sizeItem = createElement('div', 'tech-item');
-    sizeItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 12h8"></path></svg><span class="tech-value">${movie.size || 'N/A'}</span>`;
+    sizeItem.innerHTML = `<svg class="tech-icon" width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="margin-right:6px;"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M8 12h8"></path></svg><span class="tech-value">${escapeHtml(movie.size) || 'N/A'}</span>`;
 
     inlineRow.append(sizeItem, resolutionItem, audioItem);
     techSection.appendChild(inlineRow);
@@ -503,7 +757,7 @@ if (movie.certification) {
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
             </svg>
-            <span class="tech-file-name">${fileName || 'N/A'}</span>
+            <span class="tech-file-name">${escapeHtml(fileName) || 'N/A'}</span>
             <button class="copy-file-btn" title="Copy file name">Copy</button>
         `;
         const copyBtn = fileRow.querySelector('.copy-file-btn');
@@ -545,6 +799,11 @@ searchInput.addEventListener('input', e => {
     debounceTimer = setTimeout(() => fetchMovies(e.target.value, 0, false), 400);
 });
 
+sortSelect.addEventListener('change', () => {
+    currentSort = sortSelect.value;
+    fetchMovies(searchInput.value, 0, false);
+});
+
 btnGrid.addEventListener('click', () => {
     if (currentView !== 'grid') {
         currentView = 'grid';
@@ -575,20 +834,28 @@ closeModal.addEventListener('click', smoothClose);
 modal.addEventListener('click', e => { if (e.target === modal) smoothClose(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open) smoothClose(); });
 
-document.addEventListener('DOMContentLoaded', () => {
-    const posterLightbox = document.querySelector('.poster-lightbox');
-    const lightboxImg = posterLightbox.querySelector('.lightbox-img');
+// Lightbox functionality is handled inline in openModal()
 
-    document.querySelectorAll('.modal-img').forEach(img => {
-        img.addEventListener('click', () => {
-            lightboxImg.src = img.src; 
-            posterLightbox.classList.add('show');
-        });
-    });
+// --- Back to Top Button ---
+const backToTopBtn = createElement('button', 'back-to-top-btn');
+backToTopBtn.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+`;
+backToTopBtn.title = 'Back to top';
+backToTopBtn.addEventListener('click', () => {
+    contentArea.scrollTo({ top: 0, behavior: 'smooth' });
+});
+document.body.appendChild(backToTopBtn);
 
-    posterLightbox.querySelector('.close-lightbox').addEventListener('click', () => {
-        posterLightbox.classList.remove('show');
-    });
+// Show/hide based on scroll position
+contentArea.addEventListener('scroll', () => {
+    if (contentArea.scrollTop > 400) {
+        backToTopBtn.classList.add('visible');
+    } else {
+        backToTopBtn.classList.remove('visible');
+    }
 });
 
 // --- Certification Badge ---
@@ -598,11 +865,11 @@ function createCertificationBadge(certText) {
     return badge;
 }
 
-let showParipakva = false; // default off
-
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
         showParipakva = !showParipakva;
+        currentCategory = '';
+        fetchCategories();
         fetchMovies(searchInput.value, 0, false);
         console.log(`Paripakva ${showParipakva ? 'enabled' : 'disabled'}`);
     }
@@ -610,4 +877,13 @@ document.addEventListener('keydown', (e) => {
 
 
 // --- Initial Load ---
-fetchMovies('', 0, false);
+// Restore state from URL hash (bookmarkable/shareable links)
+loadFromURL();
+fetchCategories();
+fetchMovies(searchInput.value, 0, false);
+
+// Handle browser back/forward buttons
+window.addEventListener('hashchange', () => {
+    loadFromURL();
+    fetchMovies(searchInput.value, 0, false);
+});
