@@ -504,6 +504,7 @@ function renderGrid(movies, append = false) {
         };
 
         img.onload = () => {
+
             posterWrapper.classList.remove('loading');
             posterWrapper.classList.add('loaded');
 
@@ -523,6 +524,8 @@ function renderGrid(movies, append = false) {
         }
 
         posterWrapper.appendChild(img);
+
+        /* HOVER PREVIEW OVERLAY — removed (hover-info section below handles this) */
 
         /* BADGES */
 
@@ -836,6 +839,13 @@ function openModal(movie) {
         const lightbox = document.getElementById('poster-lightbox');
         const lightboxImg = lightbox.querySelector('.lightbox-img');
         lightboxImg.src = movie.poster;
+        
+        // Reset zoom state
+        lightboxImg.classList.remove('zoomed');
+        lightboxImg.style.transform = '';
+        lightboxImg.style.cursor = 'zoom-in';
+
+        // Show with animation
         lightbox.classList.add('show');
     });
 
@@ -942,9 +952,140 @@ function openModal(movie) {
 
 const lightbox = document.getElementById('poster-lightbox');
 const closeBtn = lightbox.querySelector('.close-lightbox');
+const lightboxImg = lightbox.querySelector('.lightbox-img');
+
+let isZoomed = false;
+let zoomLevel = 1;
+let isDragging = false;
+let startX, startY, translateX = 0, translateY = 0;
 
 function closeLightbox() {
     lightbox.classList.remove('show');
+    isZoomed = false;
+    zoomLevel = 1;
+    translateX = 0;
+    translateY = 0;
+    lightboxImg.classList.remove('zoomed');
+    lightboxImg.style.transform = '';
+    lightboxImg.style.cursor = 'zoom-in';
+}
+
+function updateZoom() {
+    if (isZoomed) {
+        lightboxImg.classList.add('zoomed');
+        lightboxImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})`;
+        lightboxImg.style.cursor = 'grab';
+    } else {
+        lightboxImg.classList.remove('zoomed');
+        lightboxImg.style.transform = '';
+        lightboxImg.style.cursor = 'zoom-in';
+        translateX = 0;
+        translateY = 0;
+    }
+}
+
+// Click to toggle zoom
+lightboxImg.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!isZoomed) {
+        isZoomed = true;
+        zoomLevel = 2;
+        updateZoom();
+    } else if (zoomLevel === 2) {
+        zoomLevel = 3;
+        updateZoom();
+    } else {
+        isZoomed = false;
+        zoomLevel = 1;
+        updateZoom();
+    }
+});
+
+// Mouse wheel zoom
+lightboxImg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const delta = e.deltaY > 0 ? -0.2 : 0.2;
+    zoomLevel = Math.max(1, Math.min(5, zoomLevel + delta));
+    
+    if (zoomLevel === 1) {
+        isZoomed = false;
+    } else {
+        isZoomed = true;
+    }
+    
+    updateZoom();
+});
+
+// Drag to pan when zoomed
+lightboxImg.addEventListener('mousedown', (e) => {
+    if (!isZoomed) return;
+    e.preventDefault();
+    isDragging = true;
+    startX = e.clientX - translateX;
+    startY = e.clientY - translateY;
+    lightboxImg.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    translateX = e.clientX - startX;
+    translateY = e.clientY - startY;
+    updateZoom();
+});
+
+document.addEventListener('mouseup', () => {
+    if (isDragging) {
+        isDragging = false;
+        if (isZoomed) {
+            lightboxImg.style.cursor = 'grab';
+        }
+    }
+});
+
+// Zoom control buttons
+const zoomInBtn = lightbox.querySelector('.zoom-in-btn');
+const zoomOutBtn = lightbox.querySelector('.zoom-out-btn');
+const zoomResetBtn = lightbox.querySelector('.zoom-reset-btn');
+const zoomFullBtn = lightbox.querySelector('.zoom-full-btn');
+
+if (zoomInBtn) {
+    zoomInBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        zoomLevel = Math.min(5, zoomLevel + 0.5);
+        isZoomed = true;
+        updateZoom();
+    });
+}
+
+if (zoomOutBtn) {
+    zoomOutBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        zoomLevel = Math.max(1, zoomLevel - 0.5);
+        if (zoomLevel === 1) {
+            isZoomed = false;
+        }
+        updateZoom();
+    });
+}
+
+if (zoomResetBtn) {
+    zoomResetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        isZoomed = false;
+        zoomLevel = 1;
+        updateZoom();
+    });
+}
+
+if (zoomFullBtn) {
+    zoomFullBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        isZoomed = true;
+        zoomLevel = 3;
+        updateZoom();
+    });
 }
 
 closeBtn.addEventListener('click', closeLightbox);
@@ -980,7 +1121,6 @@ btnList.addEventListener('click', () => {
         fetchMovies(searchInput.value, 0, false);
     }
 });
-
 function smoothClose() {
     modal.classList.add('closing');
     setTimeout(() => {
@@ -992,6 +1132,8 @@ function smoothClose() {
 closeModal.addEventListener('click', smoothClose);
 modal.addEventListener('click', e => { if (e.target === modal) smoothClose(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.open) smoothClose(); });
+
+// Lightbox functionality is handled inline in openModal()
 
 // --- Back to Top Button ---
 const backToTopBtn = createElement('button', 'back-to-top-btn');
@@ -1006,7 +1148,7 @@ backToTopBtn.addEventListener('click', () => {
 });
 document.body.appendChild(backToTopBtn);
 
-// Show/hide based on scroll position + infinite scroll
+// Show/hide based on scroll position
 contentArea.addEventListener('scroll', () => {
     if (contentArea.scrollTop > 400) {
         backToTopBtn.classList.add('visible');
