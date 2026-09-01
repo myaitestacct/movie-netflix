@@ -71,6 +71,7 @@ $query = isset($_GET['q']) ? trim($_GET['q']) : '';
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
 $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
 $category = isset($_GET['category']) ? trim($_GET['category']) : '';
+$favsParam = isset($_GET['favs']) ? trim($_GET['favs']) : '';
 
 // Determine source table (whitelist allowed table names)
 $useParipakva = isset($_GET['archive']) && $_GET['archive'] == 1;
@@ -118,6 +119,28 @@ $conditions = ["(FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2)"];
 if ($category !== '') {
     $conditions[] = "CATEGORY = :category";
 }
+
+// Favorites filter: comma-separated NUM values
+$favIds = [];
+$favBindings = [];
+if ($favsParam !== '') {
+    $rawIds = explode(',', $favsParam);
+    foreach ($rawIds as $i => $id) {
+        $id = (int)trim($id);
+        if ($id > 0) {
+            $favIds[] = $id;
+            $favBindings[":fav$i"] = $id;
+        }
+    }
+    if (!empty($favIds)) {
+        $placeholders = implode(',', array_keys($favBindings));
+        $conditions[] = "NUM IN ($placeholders)";
+    } else {
+        // Empty favorites list — return nothing
+        $conditions[] = "1 = 0";
+    }
+}
+
 $whereClause = implode(' AND ', $conditions);
 
 $sql = "SELECT 
@@ -153,12 +176,18 @@ try {
     if ($category !== '') {
         $stmt->bindValue(':category', $category, PDO::PARAM_STR);
     }
+    foreach ($favBindings as $key => $val) {
+        $stmt->bindValue($key, $val, PDO::PARAM_INT);
+    }
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     
     $stmt->execute();
     $rows = $stmt->fetchAll();
     
+    // ===== FIXED PAGINATION LOGIC =====
+    // If we got fewer results than requested, we've reached the end
+    // If we got exactly the limit, there MIGHT be more (check next batch)
     $returnedCount = count($rows);
     $hasMore = ($returnedCount === $limit);
     
@@ -176,20 +205,25 @@ try {
     if ($category !== '') {
         $countStmt->bindValue(':category', $category, PDO::PARAM_STR);
     }
+    foreach ($favBindings as $key => $val) {
+        $countStmt->bindValue($key, $val, PDO::PARAM_INT);
+    }
     $countStmt->execute();
     $totalResult = $countStmt->fetch();
     $totalMatches = $totalResult['total'] ?? 0;
 } catch (\PDOException $e) {
-    $totalMatches = 0;
+    $totalMatches = 0; // fallback
 }
 
 // Map DB Columns to Frontend Model
 $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPosterFileName, $useParipakva, $paripakvaPosterBasePath, $paripakvaPosterBaseUrl) {
     
+    // ===== POSTER PATH LOGIC =====
     $posterValue = (!empty($row['PICTURENAME']) && trim($row['PICTURENAME']) !== '') 
         ? $row['PICTURENAME'] 
         : $noPosterFileName;
     
+    // Choose paths based on source
     if ($useParipakva) {
         $posterPath = $paripakvaPosterBasePath;
         $posterUrl  = $paripakvaPosterBaseUrl;
@@ -210,17 +244,20 @@ $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPost
     } else {
         $imageSrc = $posterUrl . $noPosterFileName;
     }
+    // =============================
 
     $rating = !empty($row['USERRATING']) ? $row['USERRATING'] : $row['RATING'];
     
+    // ===== EXTERNAL URL LOGIC =====
     $externalUrl = null;
     if (!empty($row['URL']) && filter_var(trim($row['URL']), FILTER_VALIDATE_URL)) {
         $externalUrl = trim($row['URL']);
     }
+    // ==============================
 
     return [
         'id' => $row['NUM'],
-        'num' => $row['NUM'],
+        'num' => $row['NUM'],  // ← Explicit NUM field for frontend
         'title' => $row['FORMATTEDTITLE'],
         'year' => $row['YEAR'] ?? 'N/A',
         'genre' => $row['CATEGORY'] ?? 'Unknown',
@@ -241,6 +278,7 @@ $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPost
     ];
 }, $rows);
 
+// Return paginated response
 echo json_encode([
     'movies' => $movies,
     'hasMore' => $hasMore,
