@@ -66,6 +66,45 @@ if ($action === 'categories') {
     exit;
 }
 
+if ($action === 'stats') {
+    $statsTable = (isset($_GET['archive']) && $_GET['archive'] == 1) ? 'paripakva' : $table;
+    $allowedStatsTables = [$table, 'paripakva'];
+    if (!in_array($statsTable, $allowedStatsTables, true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid table']);
+        exit;
+    }
+    try {
+        // Total movies
+        $totalStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $statsTable");
+        $totalStmt->execute();
+        $totalMovies = $totalStmt->fetch()['total'] ?? 0;
+
+        // Average rating
+        $avgStmt = $pdo->prepare("SELECT AVG(COALESCE(NULLIF(USERRATING, ''), RATING)) as avg_rating FROM $statsTable WHERE COALESCE(NULLIF(USERRATING, ''), RATING) IS NOT NULL AND COALESCE(NULLIF(USERRATING, ''), RATING) > 0");
+        $avgStmt->execute();
+        $avgRating = round($avgStmt->fetch()['avg_rating'] ?? 0, 1);
+
+        // Most common genre
+        $genreStmt = $pdo->prepare("SELECT CATEGORY, COUNT(*) as cnt FROM $statsTable WHERE CATEGORY IS NOT NULL AND CATEGORY != '' GROUP BY CATEGORY ORDER BY cnt DESC LIMIT 1");
+        $genreStmt->execute();
+        $topGenreRow = $genreStmt->fetch();
+        $topGenre = $topGenreRow ? $topGenreRow['CATEGORY'] : 'N/A';
+        $topGenreCount = $topGenreRow ? $topGenreRow['cnt'] : 0;
+
+        echo json_encode([
+            'totalMovies' => (int)$totalMovies,
+            'avgRating' => $avgRating,
+            'topGenre' => $topGenre,
+            'topGenreCount' => (int)$topGenreCount
+        ]);
+    } catch (\PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to fetch stats']);
+    }
+    exit;
+}
+
 // ===== PAGINATION PARAMETERS =====
 $query = isset($_GET['q']) ? trim($_GET['q']) : '';
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
@@ -114,8 +153,8 @@ if (!array_key_exists($sort, $allowedSorts)) {
 
 $orderBy = $allowedSorts[$sort];
 
-// Build query with pagination
-$conditions = ["(FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2)"];
+// Build query with pagination — searches title, category, director, actors, year
+$conditions = ["(FORMATTEDTITLE LIKE :search1 OR CATEGORY LIKE :search2 OR DIRECTOR LIKE :search3 OR ACTORS LIKE :search4 OR CAST(YEAR AS CHAR) LIKE :search5)"];
 if ($category !== '') {
     $conditions[] = "CATEGORY = :category";
 }
@@ -173,6 +212,9 @@ try {
     
     $stmt->bindValue(':search1', $searchTerm, PDO::PARAM_STR);
     $stmt->bindValue(':search2', $searchTerm, PDO::PARAM_STR);
+    $stmt->bindValue(':search3', $searchTerm, PDO::PARAM_STR);
+    $stmt->bindValue(':search4', $searchTerm, PDO::PARAM_STR);
+    $stmt->bindValue(':search5', $searchTerm, PDO::PARAM_STR);
     if ($category !== '') {
         $stmt->bindValue(':category', $category, PDO::PARAM_STR);
     }
@@ -185,9 +227,6 @@ try {
     $stmt->execute();
     $rows = $stmt->fetchAll();
     
-    // ===== FIXED PAGINATION LOGIC =====
-    // If we got fewer results than requested, we've reached the end
-    // If we got exactly the limit, there MIGHT be more (check next batch)
     $returnedCount = count($rows);
     $hasMore = ($returnedCount === $limit);
     
@@ -202,6 +241,9 @@ try {
     $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $tableToQuery WHERE $whereClause");
     $countStmt->bindValue(':search1', $searchTerm, PDO::PARAM_STR);
     $countStmt->bindValue(':search2', $searchTerm, PDO::PARAM_STR);
+    $countStmt->bindValue(':search3', $searchTerm, PDO::PARAM_STR);
+    $countStmt->bindValue(':search4', $searchTerm, PDO::PARAM_STR);
+    $countStmt->bindValue(':search5', $searchTerm, PDO::PARAM_STR);
     if ($category !== '') {
         $countStmt->bindValue(':category', $category, PDO::PARAM_STR);
     }
@@ -212,18 +254,16 @@ try {
     $totalResult = $countStmt->fetch();
     $totalMatches = $totalResult['total'] ?? 0;
 } catch (\PDOException $e) {
-    $totalMatches = 0; // fallback
+    $totalMatches = 0;
 }
 
 // Map DB Columns to Frontend Model
 $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPosterFileName, $useParipakva, $paripakvaPosterBasePath, $paripakvaPosterBaseUrl) {
     
-    // ===== POSTER PATH LOGIC =====
     $posterValue = (!empty($row['PICTURENAME']) && trim($row['PICTURENAME']) !== '') 
         ? $row['PICTURENAME'] 
         : $noPosterFileName;
     
-    // Choose paths based on source
     if ($useParipakva) {
         $posterPath = $paripakvaPosterBasePath;
         $posterUrl  = $paripakvaPosterBaseUrl;
@@ -244,20 +284,17 @@ $movies = array_map(function($row) use ($posterBaseUrl, $posterBasePath, $noPost
     } else {
         $imageSrc = $posterUrl . $noPosterFileName;
     }
-    // =============================
 
     $rating = !empty($row['USERRATING']) ? $row['USERRATING'] : $row['RATING'];
     
-    // ===== EXTERNAL URL LOGIC =====
     $externalUrl = null;
     if (!empty($row['URL']) && filter_var(trim($row['URL']), FILTER_VALIDATE_URL)) {
         $externalUrl = trim($row['URL']);
     }
-    // ==============================
 
     return [
         'id' => $row['NUM'],
-        'num' => $row['NUM'],  // ← Explicit NUM field for frontend
+        'num' => $row['NUM'],
         'title' => $row['FORMATTEDTITLE'],
         'year' => $row['YEAR'] ?? 'N/A',
         'genre' => $row['CATEGORY'] ?? 'Unknown',
